@@ -1,4 +1,5 @@
 #include "../src/app/stereo_app.hpp"
+#include "metric_mapping/config.hpp"
 #include <opencv2/imgcodecs.hpp>
 #include <cmath>
 #include <iostream>
@@ -34,15 +35,21 @@ int main(int argc, char** argv)
             return 1;
         }
     }
-    if (argc != 8) {
+    if (argc != 8 && argc != 10) {
         std::cerr << "Usage: " << argv[0]
-                  << " image1 image2 fx fy cx cy baseline_m\n"
+                  << " image1 image2 fx fy cx cy baseline_m [--ultrasonic sensor.yaml]\n"
                   << "   or: " << argv[0]
                   << " --demo image1 image2\n";
         return 1;
     }
 
     try {
+        std::optional<metric_mapping::UltrasonicMeasurement> ultrasonic;
+        if (argc == 10) {
+            if (std::string(argv[8]) != "--ultrasonic")
+                throw std::runtime_error("Expected --ultrasonic sensor.yaml");
+            ultrasonic = metric_mapping::loadUltrasonicConfig(argv[9]);
+        }
         const std::filesystem::path image_1_path(argv[1]);
         const std::filesystem::path image_2_path(argv[2]);
         const cv::Mat probe = cv::imread(image_1_path.string(),
@@ -60,7 +67,7 @@ int main(int argc, char** argv)
         camera.cy = parseNumber(argv[6], "cy");
         const double baseline_m = parseNumber(argv[7], "baseline_m");
 
-        metric_mapping::app::runStereo(image_1_path, image_2_path, camera, baseline_m);
+        metric_mapping::app::runStereo(image_1_path, image_2_path, camera, baseline_m, ultrasonic);
         return 0;
     } catch (const std::exception& error) {
         std::cerr << "Error: " << error.what() << '\n';

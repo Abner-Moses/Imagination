@@ -83,6 +83,7 @@ std::vector<TestCase> rgbdTests();
 std::vector<TestCase> terrainTests();
 std::vector<TestCase> configTests();
 std::vector<TestCase> outputTests();
+std::vector<TestCase> ultrasonicTests();
 #ifdef HAVE_TWO_VIEW
 std::vector<TestCase> stereoTests();
 #endif

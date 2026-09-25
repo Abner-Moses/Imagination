@@ -112,7 +112,9 @@ void runRgbd(const std::filesystem::path& config_path)
     if (config.uav_position_world_m) {
         const LandingAnalysisConfig landing_config;
         const LandingAnalysis landing = analyzeLandingSites(
-            grid, *config.uav_position_world_m, landing_config);
+            grid, *config.uav_position_world_m, landing_config, config.ultrasonic);
+        if (landing.ultrasonic)
+            std::cout << "Ultrasonic ground check: " << landing.ultrasonic->status() << '\n';
         writeLandingAnalysis(config.output_directory, grid, landing,
                              landing_config,
                              *config.uav_position_world_m, false);

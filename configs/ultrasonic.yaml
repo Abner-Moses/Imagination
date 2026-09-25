@@ -1,0 +1,9 @@
+%YAML:1.0
+---
+# Example only: replace distance and tolerance with your synchronized measurement.
+ultrasonic:
+  distance_m: 2.0
+  maximum_error_m: 0.2
+  direction: "world_down"
+  # From UAV position to sensor, in world axes; stereo uses camera 1 as origin.
+  sensor_offset_world_m: [0.0, 0.0, 0.0]

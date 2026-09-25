@@ -8,6 +8,7 @@
 namespace metric_mapping {
 
 ReconstructionConfig loadConfig(const std::filesystem::path& config_path);
+UltrasonicMeasurement loadUltrasonicConfig(const std::filesystem::path& config_path);
 std::string depthUnitName(DepthUnit unit);
 std::string poseConventionName(PoseConvention convention);
 

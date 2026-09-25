@@ -36,6 +36,14 @@ frames:
         return loadConfig(path);
     };
     requireNear(read(valid).camera.fx, 2.0, 0.0, "Valid configuration must load");
+    const std::string sensor = "\nultrasonic: {distance_m: 10.0, maximum_error_m: 0.2, "
+        "direction: world_down, sensor_offset_world_m: [0, 0, 0]}\n";
+    requireNear(read(valid + sensor).ultrasonic->distance_m, 10, 0,
+                "RGB-D must load optional sensor measurement");
+    auto missing_position = valid + sensor;
+    const std::string position = "uav_position_world_m: [0.0, 0.0, 10.0]\n";
+    missing_position.erase(missing_position.find(position), position.size());
+    requireThrows([&] { read(missing_position); }, "Sensor reading requires UAV position");
     for (const auto& replacement : std::vector<std::pair<std::string, std::string>>{
              {"fx: 2.0", "fx: \"not calibrated\""},
              {"fx: 2.0", "fx: .Inf"},

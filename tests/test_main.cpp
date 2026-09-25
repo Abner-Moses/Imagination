@@ -22,7 +22,7 @@ int main(int argc, char** argv)
         }
     }
     std::vector<TestCase> tests;
-    for (const auto& group : {rgbdTests(), terrainTests(), configTests(), outputTests()})
+    for (const auto& group : {rgbdTests(), terrainTests(), configTests(), outputTests(), ultrasonicTests()})
         tests.insert(tests.end(), group.begin(), group.end());
 #ifdef HAVE_TWO_VIEW
     const auto stereo = stereoTests();

@@ -15,6 +15,7 @@ std::vector<ColoredPoint> terrainGridPoints(const TerrainGrid& grid);
 LandingAnalysis analyzeLandingSites(
     const TerrainGrid& grid,
     const cv::Vec3d& uav_position_world_m,
-    const LandingAnalysisConfig& config = {});
+    const LandingAnalysisConfig& config = {},
+    const std::optional<UltrasonicMeasurement>& ultrasonic = std::nullopt);
 
 }  // namespace metric_mapping

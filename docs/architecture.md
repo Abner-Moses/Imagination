@@ -2,8 +2,8 @@
 
 The project has two real reconstruction paths and a separate synthetic demo.
 Both real paths produce colored points, then share terrain mapping, landing
-analysis, and file writers. The command-line arguments and public C++ API are
-unchanged by this reorganization.
+analysis, and file writers. An optional ultrasonic reading checks the mapped
+ground before either real path recommends a landing site.
 
 ## Start here
 
@@ -50,6 +50,7 @@ src/output/                   PLY, CSV, JSON, and preview images
 | Smoothing, slope, roughness, and hazard clearance | `src/landing/surface.cpp` |
 | Fuzzy membership functions and rule tables | `src/landing/fuzzy.cpp` |
 | Hard constraints and best-site selection | `src/landing/selection.cpp` |
+| Downward ultrasonic range validation and ground comparison | `src/landing/ultrasonic.cpp` |
 | PLY/CSV exports and JSON escaping | `src/output/cloud_files.cpp` |
 | Scalar-map coloring and panel layout | `src/output/raster.cpp` |
 | Landing maps and selected-site overlay | `src/output/landing_images.cpp` |
@@ -95,7 +96,7 @@ reconstruction, mapping, landing analysis, and exports together.
 ## Tests
 
 The tests mirror the source domains: `rgbd_tests.cpp`, `config_tests.cpp`,
-`terrain_tests.cpp`, `stereo_tests.cpp`, and `output_tests.cpp`.
+`terrain_tests.cpp`, `ultrasonic_tests.cpp`, `stereo_tests.cpp`, and `output_tests.cpp`.
 `test_support.hpp` contains assertions and small fixtures; `test_main.cpp`
 collects and runs the groups. Temporary files are cleaned up even when a test
 throws. The Unix CLI test in `demo_json.cmake` also checks quoted filenames and

@@ -4,7 +4,8 @@
 namespace metric_mapping::app {
 void runStereo(const std::filesystem::path& image_1_path,
                const std::filesystem::path& image_2_path,
-               const CameraIntrinsics& camera, double baseline_m);
+               const CameraIntrinsics& camera, double baseline_m,
+               const std::optional<UltrasonicMeasurement>& ultrasonic = std::nullopt);
 void runSyntheticDemo(const std::filesystem::path& image_1_path,
                       const std::filesystem::path& image_2_path);
 void printLandingSummary(const LandingAnalysis& analysis);

@@ -1,6 +1,7 @@
 #include "metric_mapping/config.hpp"
 
 #include "metric_mapping/geometry.hpp"
+#include "metric_mapping/ultrasonic.hpp"
 
 #include <opencv2/core.hpp>
 
@@ -127,6 +128,22 @@ cv::Vec3d readVec3(const cv::FileNode& node, const std::string& context)
     return value;
 }
 
+UltrasonicMeasurement readUltrasonic(const cv::FileNode& node)
+{
+    if (!node.isMap())
+        throw std::runtime_error("ultrasonic must be a mapping");
+    UltrasonicMeasurement measurement;
+    measurement.distance_m = readFiniteDouble(node, "distance_m", "ultrasonic");
+    measurement.maximum_error_m = readFiniteDouble(node, "maximum_error_m", "ultrasonic");
+    measurement.sensor_offset_world_m = readVec3(
+        requireNode(node, "sensor_offset_world_m", "ultrasonic"),
+        "ultrasonic.sensor_offset_world_m");
+    if (readString(node, "direction", "ultrasonic") != "world_down")
+        throw std::runtime_error("Ultrasonic direction must be world_down (vertical -Z)");
+    validateUltrasonicMeasurement(measurement);
+    return measurement;
+}
+
 std::filesystem::path resolvePath(const std::filesystem::path& base,
                                   const std::string& configured_path)
 {
@@ -146,6 +163,14 @@ std::string poseConventionName(PoseConvention convention)
     return convention == PoseConvention::CameraToWorld
                ? "camera_to_world"
                : "world_to_camera";
+}
+
+UltrasonicMeasurement loadUltrasonicConfig(const std::filesystem::path& config_path)
+{
+    cv::FileStorage storage(config_path.string(), cv::FileStorage::READ);
+    if (!storage.isOpened())
+        throw std::runtime_error("Could not load ultrasonic configuration: " + config_path.string());
+    return readUltrasonic(requireNode(storage.root(), "ultrasonic", "config"));
 }
 
 ReconstructionConfig loadConfig(const std::filesystem::path& config_path)
@@ -281,6 +306,11 @@ ReconstructionConfig loadConfig(const std::filesystem::path& config_path)
     if (!uav_position.empty()) {
         config.uav_position_world_m =
             readVec3(uav_position, "uav_position_world_m");
+    }
+    if (!root["ultrasonic"].empty()) {
+        config.ultrasonic = readUltrasonic(root["ultrasonic"]);
+        if (!config.uav_position_world_m)
+            throw std::runtime_error("ultrasonic requires uav_position_world_m");
     }
 
     const cv::FileNode frames = requireNode(root, "frames", "root");

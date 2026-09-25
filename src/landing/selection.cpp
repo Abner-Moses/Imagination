@@ -116,7 +116,8 @@ void selectLandingSite(const TerrainGrid& grid, const cv::Vec3d& uav_position_wo
                     analysis.maximum_global_safety_index,
                     static_cast<double>(global));
             }
-            const bool candidate = satisfies_hard_constraints &&
+            const bool range_consistent = !analysis.ultrasonic || analysis.ultrasonic->consistent;
+            const bool candidate = range_consistent && satisfies_hard_constraints &&
                 global >= config.minimum_global_safety_index;
             if (!candidate)
                 continue;

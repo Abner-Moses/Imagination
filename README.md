@@ -64,6 +64,38 @@ principal point `(640, 360)` belongs to a larger image. These images do not come
 matching calibration or a measured baseline. Use them for the synthetic demo;
 do not infer metric terrain from guessed camera values.
 
+## Optional ultrasonic ground check
+
+Both real reconstruction paths accept a synchronized reading from a sensor
+pointing vertically downward in the world frame (`-Z`). For stereo, edit
+[`configs/ultrasonic.yaml`](configs/ultrasonic.yaml) with the measured distance
+in metres, the allowed absolute error, and the sensor's offset from camera 1:
+
+```sh
+./build/two_view image1.png image2.png fx fy cx cy baseline_m --ultrasonic configs/ultrasonic.yaml
+```
+
+For RGB-D, put the same `ultrasonic` block inside the reconstruction YAML and
+provide `uav_position_world_m`. The offset is from that UAV position to the
+sensor, expressed in world axes. A sensor mounted 10 cm below this reference
+has offset `[0, 0, -0.1]`. The range must correspond to this position (camera 1
+at capture time for stereo). Tilted sensors are not supported.
+
+The check compares the reading to `sensor_z - ground_z` at the nearest grid
+cell below the sensor. Only measured cells count; unknown or interpolated
+ground cannot confirm the reading. If the error exceeds `maximum_error_m`,
+or ground cannot be checked, no landing site is recommended. Terrain scores
+remain available for inspection. The console and `landing_site.json` report
+`consistent`, `mismatch`, or `ground_unavailable`, with both distances in JSON
+(`null` for an unavailable mapped distance).
+
+This is a local consistency check: it does not rescale the reconstruction,
+replace the measured stereo baseline, or verify every possible landing site.
+Choose a tolerance appropriate to sensor accuracy and map resolution. Supply
+valid readings within your sensor's operating range; this offline tool reads
+YAML and does not acquire readings over GPIO or serial. Omitting the block/flag
+keeps the original behavior. The synthetic demo does not use sensor readings.
+
 ## Build and test
 
 On macOS:

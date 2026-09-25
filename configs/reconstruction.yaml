@@ -42,6 +42,13 @@ map:
 # Optional. If supplied, this must use the same map_z_up world frame and metres.
 # uav_position_world_m: [x, y, z]
 
+# Optional synchronized downward ultrasonic reading; requires UAV position above.
+# ultrasonic:
+#   distance_m: 2.0
+#   maximum_error_m: 0.2
+#   direction: "world_down"
+#   sensor_offset_world_m: [0.0, 0.0, 0.0]
+
 # Each pose is a row-major rigid 4x4 matrix using pose_convention above.
 # Do not insert identity unless the camera really defines the world origin and
 # its OpenCV camera axes have been explicitly transformed into map_z_up.

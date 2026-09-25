@@ -65,6 +65,23 @@ struct FrameSpec {
     cv::Matx44d supplied_pose = cv::Matx44d::eye();
 };
 
+// A synchronized reading from a sensor pointing vertically down (world -Z).
+struct UltrasonicMeasurement {
+    double distance_m = 0.0;
+    double maximum_error_m = 0.2;
+    cv::Vec3d sensor_offset_world_m{0.0, 0.0, 0.0};
+};
+
+struct GroundRangeCheck {
+    UltrasonicMeasurement measurement;
+    std::optional<double> mapped_distance_m;
+    bool consistent = false;
+    const char* status() const {
+        return !mapped_distance_m ? "ground_unavailable" :
+               consistent ? "consistent" : "mismatch";
+    }
+};
+
 struct ReconstructionConfig {
     std::filesystem::path config_path;
     std::filesystem::path output_directory;
@@ -77,6 +94,7 @@ struct ReconstructionConfig {
     bool images_are_rectified = false;
     bool depth_registered_to_rgb = false;
     std::optional<cv::Vec3d> uav_position_world_m;
+    std::optional<UltrasonicMeasurement> ultrasonic;
     std::vector<FrameSpec> frames;
 };
 
@@ -166,6 +184,7 @@ struct LandingSite {
 };
 
 struct LandingAnalysis {
+    std::optional<GroundRangeCheck> ultrasonic;
     cv::Mat smoothed_dem_m;
     cv::Mat slope_degrees;
     cv::Mat roughness_m;

@@ -1,4 +1,5 @@
 #include "metric_mapping/terrain.hpp"
+#include "metric_mapping/ultrasonic.hpp"
 #include "analysis_internal.hpp"
 #include "../terrain/grid_internal.hpp"
 #include <cmath>
@@ -8,7 +9,8 @@ namespace metric_mapping {
 
 LandingAnalysis analyzeLandingSites(const TerrainGrid& grid,
                                     const cv::Vec3d& uav_position_world_m,
-                                    const LandingAnalysisConfig& config)
+                                    const LandingAnalysisConfig& config,
+                                    const std::optional<UltrasonicMeasurement>& ultrasonic)
 {
     detail::validateGrid(grid);
     if (config.diffusion_iterations < 0 ||
@@ -35,6 +37,8 @@ LandingAnalysis analyzeLandingSites(const TerrainGrid& grid,
     }
 
     LandingAnalysis analysis;
+    if (ultrasonic)
+        analysis.ultrasonic = checkGroundRange(grid, uav_position_world_m, *ultrasonic);
     detail::measureTerrain(grid, config, analysis);
     detail::selectLandingSite(grid, uav_position_world_m, config, analysis);
     return analysis;

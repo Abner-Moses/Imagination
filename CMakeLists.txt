@@ -21,6 +21,7 @@ add_library(metric_mapping
     src/terrain/grid.cpp
     src/terrain/point_cloud.cpp
     src/landing/analysis.cpp
+    src/landing/ultrasonic.cpp
     src/landing/surface.cpp
     src/landing/selection.cpp
     src/landing/fuzzy.cpp
@@ -78,6 +79,7 @@ if(BUILD_TESTING)
         tests/terrain_tests.cpp
         tests/config_tests.cpp
         tests/output_tests.cpp)
+    target_sources(metric_mapping_tests PRIVATE tests/ultrasonic_tests.cpp)
     if(BUILD_TWO_VIEW)
         target_sources(metric_mapping_tests PRIVATE tests/stereo_tests.cpp)
         target_link_libraries(metric_mapping_tests PRIVATE metric_stereo)

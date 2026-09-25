@@ -1,5 +1,5 @@
 build/
-output/
+/output/
 demo_output/
 tmp/
 .DS_Store

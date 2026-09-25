@@ -14,6 +14,8 @@ namespace metric_mapping::app {
 void printLandingSummary(
     const metric_mapping::LandingAnalysis& analysis)
 {
+    if (analysis.ultrasonic)
+        std::cout << "Ultrasonic ground check: " << analysis.ultrasonic->status() << '\n';
     std::cout << "Terrain hazard cells: " << analysis.hazard_cells << '\n';
     std::cout << "Landing candidate cells: "
               << analysis.candidate_cells << '\n';
@@ -34,7 +36,8 @@ void printLandingSummary(
 
 void runStereo(const std::filesystem::path& image_1_path,
                const std::filesystem::path& image_2_path,
-               const CameraIntrinsics& camera, double baseline_m)
+               const CameraIntrinsics& camera, double baseline_m,
+               const std::optional<UltrasonicMeasurement>& ultrasonic)
 {
     const TwoViewResult result =
         reconstructTwoView(image_1_path, image_2_path,
@@ -61,7 +64,7 @@ void runStereo(const std::filesystem::path& image_1_path,
     const LandingAnalysisConfig landing_config;
     const LandingAnalysis landing =
         analyzeLandingSites(
-            grid, uav_position, landing_config);
+            grid, uav_position, landing_config, ultrasonic);
 
     const std::filesystem::path cloud_path = "pointcloud.ply";
     const std::filesystem::path raw_cloud_path = "pointcloud_raw.ply";
