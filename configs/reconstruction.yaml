@@ -1,0 +1,57 @@
+%YAML:1.0
+---
+# This template is intentionally non-runnable. Replace every calibration,
+# depth, and pose entry with values measured by your sensor/estimator.
+
+world_frame: "map_z_up"
+images_are_rectified: 1
+depth_registered_to_rgb: 1
+pose_convention: "camera_to_world"  # or "world_to_camera"
+output_directory: "../output"
+
+camera:
+  width: 0
+  height: 0
+  fx: 0.0
+  fy: 0.0
+  cx: 0.0
+  cy: 0.0
+
+depth:
+  unit: "millimeters"  # exactly "meters" or "millimeters"
+  min_depth_m: 0.2
+  max_depth_m: 100.0
+  pixel_stride: 1
+  invalid_values: [0, 65535]
+
+fusion:
+  voxel_size_m: 0.05
+  max_raw_points: 10000000
+  max_voxels: 5000000
+
+map:
+  resolution_m: 0.1
+  max_cells: 50000000
+  idw:
+    enabled: 1
+    search_radius_m: 0.5
+    minimum_neighbors: 3
+    power: 2.0
+    maximum_interpolation_distance_m: 0.5
+
+# Optional. If supplied, this must use the same map_z_up world frame and metres.
+# uav_position_world_m: [x, y, z]
+
+# Each pose is a row-major rigid 4x4 matrix using pose_convention above.
+# Do not insert identity unless the camera really defines the world origin and
+# its OpenCV camera axes have been explicitly transformed into map_z_up.
+frames: []
+
+# Example schema only (keep commented until real files and poses exist):
+# frames:
+#   - rgb: "../data/rgb/000001.png"
+#     depth: "../data/depth/000001.png"
+#     pose: [r00, r01, r02, tx,
+#            r10, r11, r12, ty,
+#            r20, r21, r22, tz,
+#            0.0, 0.0, 0.0, 1.0]
