@@ -1,0 +1,11 @@
+%YAML:1.0
+---
+# Replace zeros with intrinsics calibrated at this capture resolution.
+# Input frames must already be rectified; the motion tracker does not undistort.
+camera:
+  width: 320
+  height: 240
+  fx: 0.0
+  fy: 0.0
+  cx: 159.5
+  cy: 119.5

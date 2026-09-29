@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(metric_terrain_mapping LANGUAGES CXX)
+project(Imagination LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -9,94 +9,151 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
 endif()
 
+# Switch off features you do not need on the flight computer.
 option(BUILD_TWO_VIEW "Build calibrated stereo and synthetic demo" ON)
-option(BUILD_RGBD "Build the RGB-D command-line tool" ON)
+option(BUILD_RGBD "Build the RGB-D command" ON)
+option(BUILD_MOTION "Build sparse temporal motion and benchmark" ON)
+option(BUILD_MOTION_CAMERA "Build the webcam command (requires videoio)" OFF)
+option(BUILD_VISUAL_FEATURES "Build analytic camera pre-extraction" ON)
 option(BUILD_TESTING "Build regression tests" OFF)
 find_package(OpenCV REQUIRED COMPONENTS core imgproc imgcodecs)
 
-# Shared RGB-D geometry, terrain analysis, and file outputs.
+# Each file owns one job; optional algorithms are excluded at build time.
 add_library(metric_mapping
-    src/rgbd/config.cpp
-    src/rgbd/geometry.cpp
-    src/terrain/grid.cpp
-    src/terrain/point_cloud.cpp
-    src/landing/analysis.cpp
-    src/landing/ultrasonic.cpp
-    src/landing/surface.cpp
-    src/landing/selection.cpp
-    src/landing/fuzzy.cpp
-    src/output/cloud_files.cpp
-    src/output/raster.cpp
-    src/output/rgbd_metadata.cpp
-    src/output/landing_images.cpp
-    src/output/landing_json.cpp
-    src/output/overview.cpp)
-target_include_directories(metric_mapping PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    src/config.cpp
+    src/geometry.cpp
+    src/terrain.cpp
+    src/output.cpp)
+add_library(Imagination::core ALIAS metric_mapping)
+target_include_directories(metric_mapping PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/include")
 target_include_directories(metric_mapping SYSTEM PUBLIC ${OpenCV_INCLUDE_DIRS})
 target_link_libraries(metric_mapping PUBLIC ${OpenCV_LIBS})
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
     target_compile_options(metric_mapping PRIVATE -Wall -Wextra)
 endif()
 
-if(BUILD_TWO_VIEW)
-    # OpenCV 5 split stereo/geometry from calibration. Avoid unused calibration
-    # and object-detection modules; imported targets carry their dependencies.
-    if(TARGET opencv_features AND TARGET opencv_stereo AND TARGET opencv_geometry)
-        set(STEREO_LIBS opencv_features opencv_stereo opencv_geometry)
-    elseif(TARGET opencv_features2d AND TARGET opencv_calib3d)
-        set(STEREO_LIBS opencv_features2d opencv_calib3d)
+if(BUILD_RGBD)
+    target_compile_definitions(metric_mapping PUBLIC HAVE_RGBD)
+endif()
+if(BUILD_MOTION)
+    target_sources(metric_mapping PRIVATE src/motion.cpp)
+    target_link_libraries(metric_mapping PUBLIC opencv_video)
+    target_compile_definitions(metric_mapping PUBLIC HAVE_MOTION HAVE_VISUAL_MOTION)
+    add_library(metric_motion ALIAS metric_mapping)
+endif()
+if(BUILD_MOTION_CAMERA)
+    if(NOT BUILD_MOTION)
+        message(FATAL_ERROR "BUILD_MOTION_CAMERA requires BUILD_MOTION")
+    endif()
+    target_link_libraries(metric_mapping PUBLIC opencv_videoio)
+    target_compile_definitions(metric_mapping PUBLIC HAVE_MOTION_CAMERA)
+endif()
+if(BUILD_TWO_VIEW OR BUILD_VISUAL_FEATURES)
+    if(TARGET opencv_features)
+        target_link_libraries(metric_mapping PUBLIC opencv_features opencv_geometry)
+    elseif(TARGET opencv_features2d)
+        target_link_libraries(metric_mapping PUBLIC opencv_features2d)
     else()
-        message(FATAL_ERROR "Stereo requires OpenCV features and stereo geometry modules")
+        message(FATAL_ERROR "This OpenCV installation lacks feature detection")
     endif()
-    add_library(metric_stereo
-        src/stereo/reconstruction.cpp
-        src/stereo/features.cpp
-        src/stereo/alignment.cpp
-        src/stereo/dense_depth.cpp)
-    target_link_libraries(metric_stereo PUBLIC metric_mapping ${STEREO_LIBS})
-    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
-        target_compile_options(metric_stereo PRIVATE -Wall -Wextra)
+endif()
+if(BUILD_TWO_VIEW)
+    if(TARGET opencv_stereo)
+        target_link_libraries(metric_mapping PUBLIC opencv_stereo)
+    elseif(TARGET opencv_calib3d)
+        target_link_libraries(metric_mapping PUBLIC opencv_calib3d)
+    else()
+        message(FATAL_ERROR "This OpenCV installation lacks stereo geometry")
     endif()
-    add_executable(two_view
-        apps/two_view.cpp
-        src/app/stereo_run.cpp
-        src/app/demo_run.cpp
-        src/demo/synthetic_scene.cpp
-        src/output/stereo_metadata.cpp)
-    target_link_libraries(two_view PRIVATE metric_stereo)
+    target_compile_definitions(metric_mapping PUBLIC HAVE_TWO_VIEW)
+    add_library(metric_stereo ALIAS metric_mapping)
+endif()
+if(BUILD_VISUAL_FEATURES)
+    target_sources(metric_mapping PRIVATE src/vision.cpp)
+    target_link_libraries(metric_mapping PUBLIC opencv_video)
+    if(TARGET opencv_geometry)
+        target_link_libraries(metric_mapping PUBLIC opencv_geometry opencv_calib)
+    else()
+        target_link_libraries(metric_mapping PUBLIC opencv_calib3d)
+    endif()
+    target_compile_definitions(metric_mapping PUBLIC HAVE_VISUAL_FEATURES)
+    add_library(metric_visual ALIAS metric_mapping)
 endif()
 
-if(BUILD_RGBD)
-    add_executable(metric_mapper apps/metric_mapper.cpp src/app/rgbd_run.cpp)
-    target_link_libraries(metric_mapper PRIVATE metric_mapping)
-endif()
+add_executable(imagination main.cpp)
+target_link_libraries(imagination PRIVATE metric_mapping)
+
+# Existing executable names remain usable, without compiling five copies.
+function(keep_command name enabled)
+    if(${enabled})
+        if(UNIX)
+            set(alias_operation create_symlink)
+        else()
+            set(alias_operation copy_if_different)
+        endif()
+        add_custom_target(${name} ALL
+            COMMAND ${CMAKE_COMMAND} -E ${alias_operation}
+                $<TARGET_FILE:imagination> "${CMAKE_CURRENT_BINARY_DIR}/${name}${CMAKE_EXECUTABLE_SUFFIX}"
+            DEPENDS imagination VERBATIM)
+    else()
+        file(REMOVE "${CMAKE_CURRENT_BINARY_DIR}/${name}${CMAKE_EXECUTABLE_SUFFIX}")
+    endif()
+endfunction()
+keep_command(two_view BUILD_TWO_VIEW)
+keep_command(metric_mapper BUILD_RGBD)
+keep_command(motion_benchmark BUILD_MOTION)
+keep_command(motion_camera BUILD_MOTION_CAMERA)
+keep_command(optical_flow BUILD_MOTION_CAMERA)
+keep_command(visual_features BUILD_VISUAL_FEATURES)
+
+# Compatibility for applications that still include the previous header paths.
+# These tiny forwarding headers are generated, not a second source tree to edit.
+foreach(header types config geometry point_cloud terrain ultrasonic io visualization
+        two_view motion_geometry optical_flow visual_features)
+    file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/include/metric_mapping/${header}.hpp"
+        "#pragma once\n#include \"imagination.hpp\"\n")
+endforeach()
 
 include(CTest)
 if(BUILD_TESTING)
-    add_executable(metric_mapping_tests
-        tests/test_main.cpp
-        tests/rgbd_tests.cpp
-        tests/terrain_tests.cpp
-        tests/config_tests.cpp
-        tests/output_tests.cpp)
-    target_sources(metric_mapping_tests PRIVATE tests/ultrasonic_tests.cpp)
-    if(BUILD_TWO_VIEW)
-        target_sources(metric_mapping_tests PRIVATE tests/stereo_tests.cpp)
-        target_link_libraries(metric_mapping_tests PRIVATE metric_stereo)
-        target_compile_definitions(metric_mapping_tests PRIVATE HAVE_TWO_VIEW)
-    else()
-        target_link_libraries(metric_mapping_tests PRIVATE metric_mapping)
-    endif()
+    add_executable(metric_mapping_tests tests.cpp)
+    target_link_libraries(metric_mapping_tests PRIVATE metric_mapping)
     if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
         target_compile_options(metric_mapping_tests PRIVATE -Wall -Wextra)
     endif()
     add_test(NAME metric_mapping_tests COMMAND metric_mapping_tests)
+    if(BUILD_MOTION)
+        add_test(NAME motion_synthetic_demo COMMAND imagination motion_benchmark --frames 60 --triangulate)
+    endif()
+    if(BUILD_VISUAL_FEATURES)
+        add_test(NAME analytical_still COMMAND imagination pre_extract
+            "${CMAKE_CURRENT_SOURCE_DIR}/00001.png" "${CMAKE_CURRENT_BINARY_DIR}/analytical-still-test"
+            --config "${CMAKE_CURRENT_SOURCE_DIR}/configs/pre_extraction.yaml" --data --debug)
+        if(BUILD_MOTION)
+            add_test(NAME analytical_sequence COMMAND imagination pre_extract ignored
+                "${CMAKE_CURRENT_BINARY_DIR}/analytical-sequence-test" --synthetic --frames 60)
+        endif()
+    endif()
     if(BUILD_TWO_VIEW AND UNIX)
-        add_test(NAME demo_json_roundtrip COMMAND ${CMAKE_COMMAND}
-            -DTOOL=$<TARGET_FILE:two_view>
-            -DCHECKER=$<TARGET_FILE:metric_mapping_tests>
-            -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}
-            -DWORK=${CMAKE_CURRENT_BINARY_DIR}/demo-json-test
-            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/demo_json.cmake)
+        set(demo_work "${CMAKE_CURRENT_BINARY_DIR}/demo-json-test")
+        file(MAKE_DIRECTORY "${demo_work}")
+        set(quoted_image "${demo_work}/a\"quoted.png")
+        file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/00001.png" DESTINATION "${demo_work}")
+        file(RENAME "${demo_work}/00001.png" "${quoted_image}")
+        add_test(NAME demo_json_generate COMMAND imagination two_view --demo
+            "${quoted_image}" "${CMAKE_CURRENT_SOURCE_DIR}/00002.png")
+        set_tests_properties(demo_json_generate PROPERTIES
+            WORKING_DIRECTORY "${demo_work}" FIXTURES_SETUP demo_json)
+        add_test(NAME demo_json_roundtrip COMMAND metric_mapping_tests --check-demo-json
+            "${demo_work}/demo_output/metadata.json" "${quoted_image}")
+        set_tests_properties(demo_json_roundtrip PROPERTIES FIXTURES_REQUIRED demo_json)
     endif()
 endif()
+
+# Keep the previous build/configs paths usable. Canonical examples live in configs/.
+foreach(name reconstruction ultrasonic motion_camera pre_extraction)
+    if(NOT EXISTS "${CMAKE_CURRENT_BINARY_DIR}/configs/${name}.yaml")
+        configure_file("configs/${name}.yaml" "${CMAKE_CURRENT_BINARY_DIR}/configs/${name}.yaml" COPYONLY)
+    endif()
+endforeach()

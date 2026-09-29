@@ -1,257 +1,132 @@
-# Two-view metric terrain reconstruction
+# Imagination
 
-This C++17/OpenCV program reconstructs a dense colored terrain point cloud
-from two calibrated aerial images, then produces the front-end map products
-required by the landing-site paper:
+A C++17/OpenCV research project for **GPS-denied UAV perception**.
+It uses classical camera mathematics to extract visual features, estimate motion,
+reconstruct terrain, and check potential landing sites.
 
-```text
-two calibrated, overlapping nadir images + measured baseline
-    -> ORB matching and geometric verification
-    -> parallel-view/yaw alignment
-    -> dense StereoSGBM disparity with left-right consistency
-    -> metric XYZRGB back-projection
-    -> 0.1 m terrain grid
-    -> bounded inverse-distance-weighting gap completion
-    -> colored PLY + DEM + orthomosaic
-    -> anisotropic DEM smoothing
-    -> slope + roughness + nearest-hazard maps
-    -> three-stage fuzzy landing-site selection
-```
+Research direction: **sensors → analytic pre-extraction → convolution-assisted
+Transformer → navigation**. The camera and geometric stages exist today. The full
+sensor framework and learned model are future work; resource and safety comparisons
+against CNN-ViT systems still require experiments.
 
-The paper itself uses geotagged images from several views and assumes the
-colored point cloud and UAV position are already available. This executable is
-a constrained two-image implementation of that input contract. It also
-implements the paper's geometry-only landing analysis. Water detection is
-disabled because the paper uses a neural semantic-segmentation model, which is
-outside this C++/OpenCV-only proof of concept.
-
-## Code layout
-
-- `apps/`: short command-line entry points.
-- `src/app/`: complete RGB-D, stereo, and demo workflows.
-- `src/rgbd/` and `src/stereo/`: reconstruction algorithms.
-- `src/terrain/`: point fusion, terrain grids, and interpolation.
-- `src/landing/`: surface measurements, fuzzy scores, and site selection.
-- `src/output/`: file writers and visualizations.
-- `src/demo/`: synthetic scene generation.
-- `tests/`: regression tests grouped by the same subjects.
-
-Read [the source guide](docs/architecture.md) for the processing flow, a
-file-by-file navigation table, and the shared coordinate conventions.
-Public headers remain under `include/metric_mapping/`.
-
-## Required capture geometry
-
-The following are mandatory capture assumptions. The program checks image
-sizes, alignment scale, epipolar error, and stereo consistency; two images alone
-cannot prove the absolute camera attitude or correctness of the supplied
-calibration and baseline.
-
-- Use a perspective camera, not an orthographic camera or a 2-D map pan.
-- Calibrate the camera at the exact saved image resolution.
-- Undistort both images using the calibration before running this program.
-- Point the camera straight down in both images.
-- Keep the same altitude, pitch, roll, zoom, and resolution.
-- Move the camera sideways by a measured distance in metres.
-- Small yaw changes are corrected automatically.
-- Capture a static, textured scene with substantial overlap.
-
-`baseline_m` is the physical distance between the two camera centers. It is
-what makes the cloud metric. The software does not invent this value.
-
-The current `00001.png` and `00002.png` files are 512 x 512, while the earlier
-principal point `(640, 360)` belongs to a larger image. These images do not come with
-matching calibration or a measured baseline. Use them for the synthetic demo;
-do not infer metric terrain from guessed camera values.
-
-## Optional ultrasonic ground check
-
-Both real reconstruction paths accept a synchronized reading from a sensor
-pointing vertically downward in the world frame (`-Z`). For stereo, edit
-[`configs/ultrasonic.yaml`](configs/ultrasonic.yaml) with the measured distance
-in metres, the allowed absolute error, and the sensor's offset from camera 1:
+The primary analytical research profile now produces a **28×32×32 float32 tensor**
+with channel names, per-cell validity masks, timings and reconstruction diagnostics.
+It extends the existing visual extractor; no learned adapter or Transformer is run.
 
 ```sh
-./build/two_view image1.png image2.png fx fy cx cy baseline_m --ultrasonic configs/ultrasonic.yaml
+./build/imagination pre_extract 00001.png output/analytical --data --debug
+./build/imagination pre_extract ignored output/analytical_synthetic --synthetic --frames 80 --debug
 ```
 
-For RGB-D, put the same `ultrasonic` block inside the reconstruction YAML and
-provide `uav_position_world_m`. The offset is from that UAV position to the
-sensor, expressed in world axes. A sensor mounted 10 cm below this reference
-has offset `[0, 0, -0.1]`. The range must correspond to this position (camera 1
-at capture time for stereo). Tilted sensors are not supported.
+Open `output/analytical/analytical_features.jpg`. The still image has no valid
+motion or metric geometry; the separate synthetic sequence exercises those paths.
+See the [tensor, sequence, camera and ablation guide](docs/pre_extraction.md).
 
-The check compares the reading to `sensor_z - ground_z` at the nearest grid
-cell below the sensor. Only measured cells count; unknown or interpolated
-ground cannot confirm the reading. If the error exceeds `maximum_error_m`,
-or ground cannot be checked, no landing site is recommended. Terrain scores
-remain available for inspection. The console and `landing_site.json` report
-`consistent`, `mismatch`, or `ground_unavailable`, with both distances in JSON
-(`null` for an unavailable mapped distance).
+## Build and try it
 
-This is a local consistency check: it does not rescale the reconstruction,
-replace the measured stereo baseline, or verify every possible landing site.
-Choose a tolerance appropriate to sensor accuracy and map resolution. Supply
-valid readings within your sensor's operating range; this offline tool reads
-YAML and does not acquire readings over GPIO or serial. Omitting the block/flag
-keeps the original behavior. The synthetic demo does not use sensor readings.
+Install CMake, a C++17 compiler and OpenCV (`brew install cmake opencv` on macOS), then:
 
-## Build and test
-
-On macOS:
-
-```bash
-brew install cmake opencv
-cd Imagination
-cmake -S . -B build -DBUILD_TESTING=ON
+```sh
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
 cmake --build build -j2
 ctest --test-dir build --output-on-failure
+./build/imagination visual_features 00001.png output/pre_extraction --data
 ```
 
-Release builds are the default; tests are opt-in. To build only the path you
-need, use `-DBUILD_RGBD=OFF` for stereo only, or `-DBUILD_TWO_VIEW=OFF` for
-RGB-D only. The RGB-D build requests OpenCV core, image processing, and
-image codecs, plus their transitive dependencies. Feature detection and stereo
-geometry modules are linked only by the stereo path. OpenCV 5 builds avoid the
-unused calibration and object-detection modules.
-No additional runtime dependencies are needed.
+Open `output/pre_extraction/visual_features.jpg`. It shows gradients, edges,
+corners, keypoints, color transitions, texture, contours and boundaries. Motion is
+unavailable for this still image because its timing and calibration are unknown.
+Add `--benchmark 100` to profile each feature separately.
 
-The tests cover calibrated stereo with a 1 m baseline and 20/25/35/40/60-pixel
-disparities, foreground depth preservation, ridged-terrain rejection, decimal
-grid boundaries, strict configuration parsing, large pixel strides, thin-grid
-exports, and JSON escaping. On Unix, an additional CLI test runs the supplied
-image pair in demo mode and parses its output metadata.
+## Ten C++ files, each with one responsibility
 
-The dense path verifies feature geometry, aligns yaw, and reconstructs directly
-from stereo disparity. It avoids a discarded sparse reconstruction, uses
-single-pass grayscale warps, and stores accepted points once. IDW operates in
-place using measured neighbors only. Fuzzy scores are calculated only for
-quantized inputs encountered in the map, using the same rule tables and
-membership functions.
+| File | What belongs here |
+| --- | --- |
+| [imagination.hpp](imagination.hpp) | Public settings, results and function declarations |
+| [src/internal.hpp](src/internal.hpp) | Small shared implementation declarations |
+| [src/config.cpp](src/config.cpp) | Configuration validation, argument parsing and timing summaries |
+| [src/geometry.cpp](src/geometry.cpp) | Camera math, RGB-D/stereo reconstruction and point clouds |
+| [src/terrain.cpp](src/terrain.cpp) | Terrain grids, ultrasonic ground checks and landing analysis |
+| [src/motion.cpp](src/motion.cpp) | Persistent optical-flow tracks, ego-motion and sparse triangulation |
+| [src/vision.cpp](src/vision.cpp) | Selectable image features and reusable feature data |
+| [src/output.cpp](src/output.cpp) | File exports and diagnostic images |
+| [main.cpp](main.cpp) | Commands and complete application workflows |
+| [tests.cpp](tests.cpp) | Known-input regression tests |
 
-For C++ callers, link `metric_stereo` for `reconstructTwoView` and
-`metric_mapping` for RGB-D/terrain functions. The discarded sparse path's
-`maximum_reprojection_error_px`, `minimum_parallax_degrees`, and
-`maximum_distance_factor` settings were removed. Stereo metadata now names
-its feature count `geometric_inliers` instead of `pose_inliers` and includes
-the terrain grid's X/Y origin.
+Documentation lives in `docs/`, editable examples in `configs/`, and generated
+results in `output/`. These are ordinary supporting files, outside the code-file
+budget. There is no source generation or giant combined implementation file.
 
-## Run
+## Where to start as a contributor
 
-```bash
-./build/two_view image1.png image2.png fx fy cx cy baseline_m
+Read the [beginner architecture guide](docs/architecture.md), then follow
+`VisualFeatureExtractor::extract()` in `src/vision.cpp`. It shows the steps in order:
+validate the frame, prepare it, extract selected spatial features, then update motion.
+
+Use descriptive names and keep physical units (`_px`, `_m`, `_s`, `_rad`) visible.
+Edit one module at a time, add a known-input test when behavior changes, and run the
+suite before sharing your work. Keep `build/` and `output/` out of commits.
+
+## Commands
+
+**Live camera optical flow (no calibration needed for pixel movement):**
+
+```sh
+cmake -S . -B build -DBUILD_MOTION_CAMERA=ON
+cmake --build build -j2
+mkdir -p output
+./build/imagination optical_flow 0 300 output/camera_flow > output/camera_flow.csv
 ```
 
-Every camera value must be numeric and must belong to the saved image size.
-For example, do not use a 1280 x 720 principal point with 512 x 512 images.
-Recalibrate after changing the aspect ratio, cropping, or resizing.
+Use device `0` for the default camera, and replace `300` with the desired frame
+count. Create `output/` first if it does not exist (`mkdir -p output`). The CSV
+streams accepted flow in working-image pixels and pixels/second, track counts,
+quality and processing time. Arrow images are saved every ten frames when the
+optional output directory is given. The first frame initializes tracking.
+This mode reports 2-D image motion; use `motion_camera` with calibration and fresh
+altitude for approximate metric UAV velocity. See [camera flow details](docs/optical_flow.md#live-uncalibrated-optical-flow).
 
-## Synthetic demo mode
+For **IMU + ultrasonic assisted flow**, fill in measured camera calibration and
+provide live sensor snapshots from your sensor acquisition program:
 
-When only uncalibrated images are available, use the explicitly synthetic mode
-to test PLY/DEM/orthomosaic/IDW output and visualization:
-
-```bash
-./build/two_view --demo \
-  00001.png \
-  00002.png
+```sh
+./build/imagination optical_flow 0 300 output/camera_flow \
+  --camera configs/motion_camera.yaml \
+  --imu /tmp/imu.txt --ultrasonic /tmp/range.txt
 ```
 
-This mode aligns the two images for color, then creates a deterministic
-appearance-derived height surface with one point for every input image pixel.
-For a 512 x 512 image, the completed demo PLY therefore contains 262,144
-points. It writes `demo_output/` and marks both PLY headers and
-`metadata.json` as synthetic. It is useful for exercising the software and
-viewing terrain/rocks together, but it is **not** stereo depth and must not be
-used for measurements or landing decisions. Its landing maps are generated
-only to test the processing chain and are marked `demo_only`.
+IMU yaw constrains rotation; ultrasonic height supplies metric scale. Missing,
+stale or unsupported IMU readings suppress metric output when `--imu` is enabled.
+The [sensor input guide](docs/sensor_inputs.md) defines timestamps, axes, file
+formats and the direct C++ API. Hardware acquisition remains outside the tracker.
 
-## Landing-site analysis
+Run `./build/imagination --help` to list enabled commands. Existing names such as
+`./build/visual_features` and `./build/two_view` still work.
 
-After creating the registered DEM, the program performs the paper's terrain
-decision stages:
+| Command after `./build/imagination` | Purpose |
+| --- | --- |
+| `pre_extract INPUT OUTPUT ...` | Analytical tensor from a still, timestamped sequence, video or camera; optional exports/diagnostics |
+| `optical_flow [device=0] [frames=300] [debug_directory]` | Live sparse webcam flow without calibration; pixel units only |
+| `visual_features IMAGE OUTPUT [--features NAMES] [--benchmark N] [--data]` | Image features, JPEG, reusable data and profiling |
+| `motion_benchmark --frames 500 [--triangulate]` | Synthetic motion and runtime measurements |
+| `motion_camera ...` | Calibrated webcam tracking; enable `BUILD_MOTION_CAMERA` first |
+| `two_view IMAGE1 IMAGE2 FX FY CX CY BASELINE_M` | Calibrated metric stereo |
+| `two_view --demo 00001.png 00002.png` | Explicitly synthetic geometry for checking outputs |
+| `metric_mapper configs/reconstruction.yaml` | Registered RGB-D with measured calibration and supplied poses |
 
-1. Ten iterations of edge-preserving anisotropic diffusion smooth the DEM.
-2. A metric Sobel derivative produces local slope in degrees. The maximum
-   measured gradient to an adjacent cell provides a conservative lower bound,
-   so alternating ridges and sharp steps cannot cancel out.
-3. Local roughness is the standard deviation of
-   `original DEM - smoothed DEM` over the UAV footprint.
-4. Excessive slope, excessive roughness, missing terrain, and incomplete UAV
-   footprints become hazards.
-5. A Euclidean distance transform produces nearest-hazard clearance.
-6. The paper's three fuzzy rule tables produce terrain safety, distance, and
-   global safety indices.
-7. Cells satisfying every hard constraint and the global-index threshold are
-   candidates. The highest global index is selected, with terrain safety and
-   distance index as tie breakers.
+All build switches remain: `BUILD_TWO_VIEW`, `BUILD_RGBD`, `BUILD_MOTION`,
+`BUILD_MOTION_CAMERA`, `BUILD_VISUAL_FEATURES`, and `BUILD_TESTING`.
+For webcam support, configure with `-DBUILD_MOTION_CAMERA=ON` and rebuild.
+The YAML examples deliberately require real sensor values before flight use.
 
-The defaults come from Table VIII of the paper:
+For C++ integration, include `imagination.hpp`, use namespace `metric_mapping`,
+and link `Imagination::core`. Existing library aliases and generated compatibility
+include paths remain available. Prefer the public header over `src/internal.hpp`.
 
-- Maximum slope: `10 degrees`.
-- Maximum roughness: `0.02 m`.
-- Minimum nearest-hazard distance: `1.5 m`.
-- UAV bounding-box diagonal: `1.0 m`.
-- Minimum global safety index: `44.8%`.
+## Reference
 
-These values are examples from the paper, not universal flight limits. Change
-`LandingAnalysisConfig` to match the dimensions and limits of the real UAV.
-The program treats rocks and ground as one geometric surface: rock boundaries
-and protrusions become unsafe through slope, roughness, and hazard clearance.
-
-The local world frame is gravity-aligned under the nadir capture contract:
-
-- `+X`: image-right from camera 1.
-- `+Y`: image-up from camera 1.
-- `+Z`: upward.
-- Camera 1/UAV position: `(0, 0, 0)`.
-- Units: metres, provided `baseline_m` and intrinsics are correct.
-
-## Outputs
-
-A successful run writes:
-
-- `pointcloud_raw.ply`: measured dense StereoSGBM XYZRGB points.
-- `pointcloud.ply`: homogeneous 0.1 m XY terrain grid containing measured and
-  bounded-IDW interpolated points together.
-- `dem.csv`: registered `+Z` elevation grid in metres.
-- `orthomosaic.png`: registered vertical-view color grid.
-- `validity_mask.png`: `255` measured, `127` interpolated, `0` unknown.
-- `dem_preview.png`: colorized DEM.
-- `disparity.png`: accepted dense stereo disparities.
-- `matches.jpg`: final parallel-alignment feature inliers.
-- `debug_overview.png`: orthomosaic, DEM, validity, and side-cloud views.
-- `metadata.json`: intrinsics, baseline, quality diagnostics, counts, and map
-  dimensions.
-- `smoothed_dem.png`: anisotropic-diffusion DEM used for slope estimation.
-- `slope.png`: local slope visualization, scaled from zero to twice the limit.
-- `roughness.png`: local roughness, scaled from zero to twice the limit.
-- `hazard_mask.png`: `255` hazard and `0` geometrically admissible terrain.
-- `nearest_hazard_distance.png`: distance to the nearest hazard.
-- `safety_index.png`: fuzzy slope/roughness safety index.
-- `distance_index.png`: fuzzy UAV-distance/hazard-clearance index.
-- `global_safety_index.png`: combined fuzzy landing suitability.
-- `best_landing_site.png`: orthomosaic with hazards in red and the selected
-  UAV footprint circled in green.
-- `landing_analysis_overview.png`: all landing-analysis maps in one image.
-- `landing_site.json`: constraints, counts, UAV position, and selected XYZ and
-  scores. Demo output explicitly states that its geometry is synthetic.
-
-Rocks, protrusions, and terrain remain in the same colored geometric cloud.
-The terrain grid keeps the highest `+Z` measured point in each XY cell, so
-above-ground items are not discarded. They are not assigned semantic class
-labels at this stage.
-
-View a successful cloud with MeshLab:
-
-```bash
-brew install --cask meshlab
-open -a MeshLab pointcloud.ply
-```
-
-## Existing RGB-D path
-
-The earlier modular metric RGB-D implementation remains available as
-`metric_mapper`. It accepts registered metric depth and supplied poses through
-`configs/reconstruction.yaml`; it is independent of the two-image stereo
-executable.
+- [Camera features, API, ablations and future model connections](docs/pre_extraction.md)
+- [Optical flow, motion equations, altitude scale and triangulation](docs/optical_flow.md)
+- [Stereo, RGB-D, terrain, landing and output formats](docs/reconstruction.md)
+- [Coordinate and unit conventions](docs/coordinates.md)
+- [Recorded motion benchmarks and limitations](docs/motion_benchmark.md)

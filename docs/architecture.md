@@ -1,112 +1,163 @@
-# Reading and changing the code
+# A beginner's guide to Imagination
 
-The project has two real reconstruction paths and a separate synthetic demo.
-Both real paths produce colored points, then share terrain mapping, landing
-analysis, and file writers. An optional ultrasonic reading checks the mapped
-ground before either real path recommends a landing site.
-
-## Start here
-
-For the complete stereo workflow, read these in order:
-
-1. [`apps/two_view.cpp`](../apps/two_view.cpp) parses arguments and reports errors.
-2. [`src/app/stereo_run.cpp`](../src/app/stereo_run.cpp) connects reconstruction,
-   terrain mapping, landing analysis, and exports.
-3. [`src/stereo/reconstruction.cpp`](../src/stereo/reconstruction.cpp) shows the
-   three reconstruction stages: feature matching, alignment, and dense depth.
-4. [`src/landing/analysis.cpp`](../src/landing/analysis.cpp) validates the input,
-   measures terrain, and selects a landing site.
-
-For RGB-D, start at [`apps/metric_mapper.cpp`](../apps/metric_mapper.cpp), then
-[`src/app/rgbd_run.cpp`](../src/app/rgbd_run.cpp). Its depth and poses come from
-the supplied configuration instead of stereo matching.
+Think of the program as a set of tools that turn measurements into useful facts.
+The files follow those jobs; the public header describes what each tool accepts
+and returns. The same data can be used by later research stages without drawing it.
 
 ```text
-apps/                         arguments and exit codes
-  |
-src/app/                      application workflows
-  |-- src/rgbd/               calibrated depth + supplied camera poses
-  |-- src/stereo/             two images + measured baseline
-  |-- src/demo/               explicitly synthetic appearance-derived geometry
-  |
-src/terrain/                  colored points -> regular elevation grid
-  |
-src/landing/                  terrain measurements -> hazards -> ranked sites
-  |
-src/output/                   PLY, CSV, JSON, and preview images
+main.cpp: read arguments and choose a workflow
+    |
+    +-- config.cpp: validate settings and inputs
+    +-- vision.cpp: camera frame -> gradients, points, textures and boundaries
+    +-- motion.cpp: sequential frames -> optical flow -> camera motion
+    +-- geometry.cpp: calibrated images/depth -> metric points
+    |       |
+    |       +-- terrain.cpp: points -> ground grid -> landing checks
+    |
+    +-- output.cpp: write files or draw diagnostics when explicitly requested
+
+tests.cpp: give each stage known inputs and check the answers
 ```
 
-## Where to make a change
+`imagination.hpp` is the shared public contract. `src/internal.hpp` contains only
+small helpers needed between modules. Implementation classes and scratch buffers
+stay inside the module that uses them. The project uses ordinary functions,
+records and OpenCV buffers; there is no plugin framework or dynamic module loader.
 
-| Concern | File |
-| --- | --- |
-| YAML schema and strict validation | `src/rgbd/config.cpp` |
-| Camera transforms and depth back-projection | `src/rgbd/geometry.cpp` |
-| Voxel fusion and cloud bounds | `src/terrain/point_cloud.cpp` |
-| Grid boundaries and IDW interpolation | `src/terrain/grid.cpp` |
-| ORB matching and geometric verification | `src/stereo/features.cpp` |
-| Yaw correction and disparity search bounds | `src/stereo/alignment.cpp` |
-| StereoSGBM, consistency checks, and metric XYZ | `src/stereo/dense_depth.cpp` |
-| Smoothing, slope, roughness, and hazard clearance | `src/landing/surface.cpp` |
-| Fuzzy membership functions and rule tables | `src/landing/fuzzy.cpp` |
-| Hard constraints and best-site selection | `src/landing/selection.cpp` |
-| Downward ultrasonic range validation and ground comparison | `src/landing/ultrasonic.cpp` |
-| PLY/CSV exports and JSON escaping | `src/output/cloud_files.cpp` |
-| Scalar-map coloring and panel layout | `src/output/raster.cpp` |
-| Landing maps and selected-site overlay | `src/output/landing_images.cpp` |
-| Landing-site JSON | `src/output/landing_json.cpp` |
-| RGB-D and stereo/demo metadata | `src/output/rgbd_metadata.cpp`, `stereo_metadata.cpp` |
-| Cloud/terrain debug overview | `src/output/overview.cpp` |
-| Synthetic scene generation | `src/demo/synthetic_scene.cpp` |
+## Words you will see in the code
 
-## Interfaces and ownership
+- **Pixel:** one cell in an image. `cv::Mat` stores an image or numeric grid.
+- **Gradient:** how quickly brightness changes across neighboring pixels.
+- **Corner:** an image point whose neighborhood changes in two directions.
+- **Optical flow:** the movement of an image point between frames, in pixels.
+- **Ego-motion:** the camera's motion estimated from image correspondences.
+- **Calibration:** numbers that relate image pixels to rays leaving the camera.
+- **Triangulation:** intersecting rays from different camera positions to estimate a 3-D point.
+- **Terrain grid:** ground elevation sampled in square cells.
+- **Validity mask:** which values can be used; an unknown value is not a safe value.
+- **`std::optional`:** a result that may be unavailable; check it before using it.
+- **Regression test:** a known example that catches accidental behavior changes.
 
-`include/metric_mapping/` is the public library interface. Its headers keep the
-existing names so callers do not need to follow implementation file moves.
-`types.hpp` defines the shared data: camera calibration, colored points, terrain
-grids, settings, and results.
+Optical flow alone does not measure metres. The motion module needs calibrated
+camera geometry and a valid height reading to estimate metric planar motion.
+Contours are image boundaries, not semantic object detections. These distinctions
+are essential when interpreting the output or making navigation decisions.
 
-Headers under `src/` are private to the implementation. They declare only the
-small records and stage functions needed between neighboring modules. For
-example, `stereo_internal.hpp` describes verified feature matches and the
-aligned image pair. It is not a second public API.
+## How to read the main processing functions
 
-Algorithms do not print progress or write files. `src/app/` chooses the order
-of operations and output names; `src/output/` handles serialization and
-presentation. Synthetic geometry stays under `src/demo/`, separate from the
-metric reconstruction algorithms.
+Start with `VisualFeatureExtractor::extract()` in `src/vision.cpp`. Its flow is:
 
-The refactor keeps the lightweight implementation: ordinary functions and
-value types, shared OpenCV image buffers, no plugin framework or new runtime
-dependencies. Fuzzy scores are cached per analysis, and IDW reads only measured
-cells while updating the grid in place.
+1. `validateFrame()` checks type, calibration and timestamps.
+2. `prepare()` reduces resolution and converts to grayscale.
+3. `extractSpatialFeatures()` computes selected maps, sharing derivatives and the tensor.
+4. `motion()` calls the existing temporal tracker when calibration is available.
+5. Return the reusable result with coordinates, validity, timing and feature records.
 
-## Coordinate conventions
+Next read `SparseFlowTracker::processFrame()` in `src/motion.cpp`:
 
-- Distances and elevations are in metres; slope is in degrees.
-- World `+Z` points upward. Grid columns increase toward `+X`; rows toward `-Y`.
-- Grid validity is `255` for measured, `127` for interpolated, and `0` for unknown.
-- OpenCV camera coordinates use `+X` right, `+Y` down, and `+Z` forward.
-- The stereo path assumes nadir captures and uses camera 1 as the world origin.
-- An unknown or incomplete landing footprint is a hazard, not a safe default.
+1. Check the input and decide whether the height measurement is fresh enough.
+2. Prepare grayscale, then build/reuse the small image pyramid.
+3. Track points with Lucas-Kanade.
+4. `estimateTrackedMotion()` rejects geometric outliers and checks whether metric scale is available.
+5. Update optional sparse landmarks, replenish missing points, and remember this frame.
 
-These conventions are shared across modules; changing one requires checking
-reconstruction, mapping, landing analysis, and exports together.
+The explicit checks are part of the algorithm, not unnecessary complexity.
+Changing pixel-center math, coordinate signs, height freshness, or the treatment
+of unknown terrain can produce plausible but wrong answers.
 
-## Tests
+## What was simplified inside the code
 
-The tests mirror the source domains: `rgbd_tests.cpp`, `config_tests.cpp`,
-`terrain_tests.cpp`, `ultrasonic_tests.cpp`, `stereo_tests.cpp`, and `output_tests.cpp`.
-`test_support.hpp` contains assertions and small fixtures; `test_main.cpp`
-collects and runs the groups. Temporary files are cleaned up even when a test
-throws. The Unix CLI test in `demo_json.cmake` also checks quoted filenames and
-that all demo lattice cells remain measured.
+- One camera-resize rule now serves both motion and visual extraction. It preserves
+  camera rays and OpenCV's pixel-center convention, including odd image dimensions.
+- Visual feature dependencies are named booleans instead of repeated long conditions.
+  Disabled features still avoid unnecessary work.
+- The motion loop delegates pyramid construction and geometric/metric estimation
+  to named steps. Track IDs and their triangulation anchors are filtered together.
+- Commands share strict integer parsing and benchmark statistics. One command table
+  drives both help and execution, so their lists cannot accidentally disagree.
+- Public declarations no longer include test-only and workflow helper structures.
+- Sample configuration is normal YAML again; documentation is split by topic.
 
-```sh
-cmake -S . -B build -DBUILD_TESTING=ON
-cmake --build build -j2
-ctest --test-dir build --output-on-failure
+## Making a safe first change
+
+Change one setting or one feature at a time. Locate its test and add a small known
+example when changing behavior. Run the full tests, inspect the output, and explain
+the physical assumptions in your review. Do not remove a calibration or hazard
+check merely to obtain more valid-looking output.
+
+Return values from the visual extractor borrow reusable buffers; clone maps before
+keeping them past the next frame. One tracker/extractor belongs to one stream.
+Output drawing and file writing are explicit operations outside the flight hot path.
+
+## Build and compatibility
+
+CMake compiles modules directly and omits optional motion/vision sources when disabled.
+The common library is available as `Imagination::core` or `metric_mapping`; existing
+`metric_motion`, `metric_stereo` and `metric_visual` names remain aliases when enabled.
+Tiny forwarding headers under `build/include/metric_mapping/` support older includes.
+They contain no implementation and are not files contributors need to maintain.
+
+`configs/` contains the canonical examples. For existing scripts, CMake also creates
+missing copies under `build/configs/` without overwriting edited copies. Relative
+paths are always resolved from the YAML file's own directory; prefer the canonical
+examples when starting a new experiment.
+
+The existing geometric pipelines remain independent of the future learned model.
+The next research boundary is synchronized, calibrated sensor data joined to the
+feature records, then an explicit representation/token encoder. See
+[the pre-extraction reference](pre_extraction.md) for the full integration plan.
+
+## Verification of the modular refactor
+
+The Release build passes 50 regression cases plus synthetic-motion, analytical
+still/sequence and demo-generation/JSON CTests. The
+AddressSanitizer/UndefinedBehaviorSanitizer build,
+including float-cast overflow checks, also passes. The diagnostic JPEG remains
+byte-for-byte identical. Spatial-only, motion-only and RGB-D-only builds are
+checked independently. Webcam support compiles; physical camera/sensor acquisition
+has not been exercised by these automated tests.
+
+The live `optical_flow` command now uses `PixelFlowTracker` for uncalibrated camera
+frames. It reuses sparse tracking but exposes only pixel displacement/velocity,
+never metric pose. Its additional regression covers BGR input, downsampling,
+known translations, timing, reset, texture loss and optional arrow rendering;
+the current full suite has 38 cases. `motion_camera` remains the calibrated path.
+
+## Primary analytical tensor profile
+
+`analyticalFeatureSettings()` selects the 28-channel research bank inside the
+existing `VisualFeatureExtractor`. `pre_extract` is a command in `imagination`,
+not another application. The flow ends at a channel-major float32 tensor and mask:
+
+```text
+vision: shared luminance/derivatives → appearance/HOG/Harris/boundaries/chroma
+        previous luminance         → dense Farneback U/V
+motion: existing sparse LK         → persistent correspondences
+geometry: essential pose diagnostics (unit-baseline scale)
+          validated nadir/range poses → filtered metric triangulation
+vision: bounded colored local map  → terrain grid + bounded IDW
+terrain: surface-only measurements → metric slope/diffusion/residual roughness
+geometry: current-camera projection + z-buffer → supported image-aligned geometry
+vision: fixed normalization + selection + masks → C×32×32 tensor → STOP
 ```
 
-Use `-DBUILD_TWO_VIEW=OFF` for RGB-D only, or `-DBUILD_RGBD=OFF` for stereo only.
-Tests remain optional, and new build directories default to Release mode.
+`imagination.hpp` extends the existing settings/result contract. `src/vision.cpp`
+coordinates the stages; `src/motion.cpp` exposes pre-model LK correspondences;
+`src/geometry.cpp` recovers relative pose and projects terrain;
+`src/terrain.cpp::measureSurface()` shares diffusion and residual statistics without
+running landing decisions. `src/config.cpp` validates ablation/numeric settings;
+`src/output.cpp` renders fixed-scale tensor diagnostics. `main.cpp` accepts still,
+manifest, video/camera and explicitly synthetic inputs. Tests remain in `tests.cpp`.
+
+No additional C++ code files were introduced. All previous build switches and
+library aliases remain. With `BUILD_VISUAL_FEATURES=ON`, OpenCV video provides
+dense Farneback even when sparse `BUILD_MOTION=OFF`; calibration/geometry modules
+support rectification and relative-pose functions. Disabling visual features
+removes those analytical dependencies. The existing sparse-only path does not
+start computing dense flow.
+
+The [pre-extraction guide](pre_extraction.md) is the authoritative channel, unit,
+validity, configuration, coordinate and timing contract. The full bank is a
+candidate experiment, not a claim that computing every feature is cheapest.
+Learned adapters, CoHAtNet/HTransformer, semantic outputs and navigation are future
+consumers of that contract, not dependencies of this implementation.
