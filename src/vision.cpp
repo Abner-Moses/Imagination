@@ -54,18 +54,34 @@ struct VisualFeatureExtractor::Impl {
     void motion(double timestamp, std::optional<AltitudeSample> altitude, std::optional<ImuSample> imu);
     bool analytic(AnalyticFeature f) const { return settings.analytical.enabled && settings.analytical.has(f); }
     bool geometryNeeded() const;
+    NamedStageTiming& analyticalTiming(const char* name);
+    void setAnalyticalTiming(const char* name, double elapsed_ms, bool ran);
     void analyticalSpatial();
+    void denseHog();
     void denseMotion(double timestamp);
+    void scatterDenseFlow();
     void geometricFeatures(double timestamp);
+#ifdef HAVE_VISUAL_MOTION
+    void updateRelativePose(const MotionEstimate& motion);
+    void resetMapSegment(const MotionEstimate& motion);
+    void pruneLocalMap(double timestamp, const MotionEstimate& motion);
+    void addNewLandmarks(double timestamp, const MotionEstimate& motion);
+    std::vector<ColoredPoint> localCloud();
+    bool buildTerrain(const std::vector<ColoredPoint>& cloud);
+    cv::Mat terrainConfidence(double timestamp, const MotionEstimate& motion);
+    void projectGeometry(const cv::Mat& confidence, const MotionEstimate& motion);
+#endif
     void packTensor();
+    void reduceChannel(int channel, cv::Mat& values, cv::Mat& valid);
+    void normalizeChannel(int channel, const cv::Mat& source, cv::Mat& destination);
     template<class F> void stage(const char* name, F operation) {
-        auto it=std::find_if(output.analytical_stages.begin(),output.analytical_stages.end(),
-            [&](const auto& t){return t.name==name;});
-        if(it==output.analytical_stages.end())throw std::logic_error("Unknown analytical timing stage");
-        it->ran=true;
+        auto& timing = analyticalTiming(name);
+        timing.ran = true;
         if(!settings.profiling){operation();return;}
-        const auto start=std::chrono::steady_clock::now();operation();
-        if(settings.profiling)it->elapsed_ms+=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count();
+        const auto start = std::chrono::steady_clock::now();
+        operation();
+        timing.elapsed_ms += std::chrono::duration<double,std::milli>(
+            std::chrono::steady_clock::now() - start).count();
     }
     template<class F> void run(VisualStage stage, F operation) {
         auto& timing = output.stages[std::size_t(stage)];
@@ -636,9 +652,24 @@ bool VisualFeatureExtractor::Impl::geometryNeeded() const
         AnalyticFeature::Roughness,AnalyticFeature::GeometryConfidence})if(analytic(f))return true;
     return false;
 }
+NamedStageTiming& VisualFeatureExtractor::Impl::analyticalTiming(const char* name)
+{
+    const auto timing = std::find_if(
+        output.analytical_stages.begin(), output.analytical_stages.end(),
+        [name](const NamedStageTiming& item) { return item.name == name; });
+    if (timing == output.analytical_stages.end())
+        throw std::logic_error(std::string("Unknown analytical timing stage: ") + name);
+    return *timing;
+}
+void VisualFeatureExtractor::Impl::setAnalyticalTiming(
+    const char* name, double elapsed_ms, bool ran)
+{
+    auto& timing = analyticalTiming(name);
+    timing.ran = ran;
+    timing.elapsed_ms = elapsed_ms;
+}
 void VisualFeatureExtractor::Impl::analyticalSpatial()
 {
-    const auto& a=settings.analytical;
     if(analytic(AnalyticFeature::Appearance)){
         bank[0]=color_planes[0];bank[1]=color_planes[2];bank[2]=color_planes[1];
     }
@@ -657,231 +688,512 @@ void VisualFeatureExtractor::Impl::analyticalSpatial()
             cv::magnitude(dx,dy,i==0?chroma_cb:chroma_cr);bank[18+i]=i==0?chroma_cb:chroma_cr;
         }
     });
-    if(analytic(AnalyticFeature::Hog))stage("hog",[&]{
-        if(!settings.has(VisualFeature::EdgeOrientation))cv::phase(gx,gy,hog_angle,false);
-        for(auto& p:hog){p.create(a.grid_size,CV_32F);p.setTo(0);}
-        for(int y=0;y<gx.rows;++y){
-            const float* angles=hog_angle.ptr<float>(y),*pm=magnitude.ptr<float>(y);
-            const int row=y*a.grid_size.height/gx.rows;
-            for(int x=0;x<gx.cols;++x){
-                float angle=angles[x];if(angle>=float(CV_PI))angle-=float(CV_PI);
-                const float bin=angle*float(9/CV_PI);const int lo=std::min(8,int(bin)),hi=(lo+1)%9;
-                const float fraction=bin-lo;const int col=x*a.grid_size.width/gx.cols;
-                hog[lo].at<float>(row,col)+=pm[x]*(1-fraction);hog[hi].at<float>(row,col)+=pm[x]*fraction;
+    if(analytic(AnalyticFeature::Hog))stage("hog",[&]{denseHog();});
+}
+void VisualFeatureExtractor::Impl::denseHog()
+{
+    const auto grid = settings.analytical.grid_size;
+    if(!settings.has(VisualFeature::EdgeOrientation))
+        cv::phase(gx, gy, hog_angle, false);
+    for(auto& plane : hog) {
+        plane.create(grid, CV_32F);
+        plane.setTo(0);
+    }
+
+    for(int y = 0; y < gx.rows; ++y) {
+        const float* angles = hog_angle.ptr<float>(y);
+        const float* strengths = magnitude.ptr<float>(y);
+        const int cell_y = y * grid.height / gx.rows;
+        for(int x = 0; x < gx.cols; ++x) {
+            float angle = angles[x];
+            if(angle >= float(CV_PI)) angle -= float(CV_PI);
+            const float bin = angle * float(9 / CV_PI);
+            const int lower = std::min(8, int(bin));
+            const int upper = (lower + 1) % 9;
+            const float upper_weight = bin - lower;
+            const int cell_x = x * grid.width / gx.cols;
+            hog[lower].at<float>(cell_y, cell_x) += strengths[x] * (1 - upper_weight);
+            hog[upper].at<float>(cell_y, cell_x) += strengths[x] * upper_weight;
+        }
+    }
+
+    // Normalize each cell independently so every bin remains image-aligned.
+    for(int y = 0; y < grid.height; ++y) {
+        for(int x = 0; x < grid.width; ++x) {
+            float squared_norm = 1e-12F;
+            for(const auto& plane : hog) {
+                const float value = plane.at<float>(y, x);
+                squared_norm += value * value;
             }
+            const float norm = std::sqrt(squared_norm);
+            for(auto& plane : hog) plane.at<float>(y, x) /= norm;
         }
-        // Independent cell L2 normalization: no overlapping block-layout ambiguity.
-        for(int y=0;y<a.grid_size.height;++y)for(int x=0;x<a.grid_size.width;++x){
-            float norm=1e-12F;for(auto& p:hog)norm+=p.at<float>(y,x)*p.at<float>(y,x);
-            norm=std::sqrt(norm);for(auto& p:hog)p.at<float>(y,x)/=norm;
-        }
-        for(int i=0;i<9;++i)bank[6+i]=hog[i];
-    });
+    }
+    for(int bin = 0; bin < 9; ++bin) bank[6 + bin] = hog[bin];
 }
 void VisualFeatureExtractor::Impl::denseMotion(double timestamp)
 {
-    if(!analytic(AnalyticFeature::DenseFlow))return;
-    const auto& a=settings.analytical;
+    if(!analytic(AnalyticFeature::DenseFlow)) return;
+    const auto& analytical = settings.analytical;
     // Shared smoothed luminance when derivatives ran; otherwise prepare it here.
     if(!output.analytical_stages[2].ran)
-        cv::GaussianBlur(output.gray,smooth,{a.gaussian_kernel,a.gaussian_kernel},a.gaussian_sigma);
-    for(auto* p:{&dense_u,&dense_v,&dense_counts}){p->create(output.working_size,CV_32F);p->setTo(0);}
-    dense_valid.create(output.working_size,CV_8U);dense_valid.setTo(0);
-    bank[20]=dense_u;bank[21]=dense_v;bank_masks[20]=dense_valid;bank_masks[21]=dense_valid;
-    if(!previous_dense.empty()&&previous_dense.size()==smooth.size()&&timestamp-last_timestamp<=settings.motion.maximum_frame_gap_s){
-        stage("dense_flow",[&]{
-            cv::calcOpticalFlowFarneback(previous_dense,smooth,dense_flow,a.flow_pyramid_scale,a.flow_levels,
-                a.flow_window,a.flow_iterations,a.flow_poly_n,a.flow_poly_sigma,0);
-            auto& counts=dense_counts;
-            // Farneback's forward flow lives at OLD pixels. Scatter to current
-            // endpoints before concatenating with current-frame appearance.
-            for(int y=0;y<dense_flow.rows;++y)for(int x=0;x<dense_flow.cols;++x){
-                const auto v=dense_flow.at<cv::Vec2f>(y,x);const double u=x+double(v[0]),w=y+double(v[1]);
-                if(!std::isfinite(u)||!std::isfinite(w)||u<0||w<0||u>dense_flow.cols-1||w>dense_flow.rows-1)continue;
-                const int xx=int(std::floor(u+0.5)),yy=int(std::floor(w+0.5));
-                bank[20].at<float>(yy,xx)+=v[0];bank[21].at<float>(yy,xx)+=v[1];counts.at<float>(yy,xx)+=1;
-            }
-            for(int y=0;y<counts.rows;++y)for(int x=0;x<counts.cols;++x){
-                const float n=counts.at<float>(y,x);if(n==0)continue;
-                bank[20].at<float>(y,x)/=n;bank[21].at<float>(y,x)/=n;bank_masks[20].at<unsigned char>(y,x)=255;
-            }
-            output.analytical.dense_flow_valid=cv::countNonZero(bank_masks[20])>0;
+        cv::GaussianBlur(output.gray, smooth,
+            {analytical.gaussian_kernel, analytical.gaussian_kernel},
+            analytical.gaussian_sigma);
+    for(auto* plane : {&dense_u, &dense_v, &dense_counts}) {
+        plane->create(output.working_size, CV_32F);
+        plane->setTo(0);
+    }
+    dense_valid.create(output.working_size, CV_8U);
+    dense_valid.setTo(0);
+    bank[20] = dense_u;
+    bank[21] = dense_v;
+    bank_masks[20] = dense_valid;
+    bank_masks[21] = dense_valid;
+
+    const bool compatible_previous = !previous_dense.empty() &&
+        previous_dense.size() == smooth.size();
+    const bool recent_previous = timestamp - last_timestamp <=
+        settings.motion.maximum_frame_gap_s;
+    if(compatible_previous && recent_previous) {
+        stage("dense_flow", [&] {
+            cv::calcOpticalFlowFarneback(
+                previous_dense, smooth, dense_flow,
+                analytical.flow_pyramid_scale, analytical.flow_levels,
+                analytical.flow_window, analytical.flow_iterations,
+                analytical.flow_poly_n, analytical.flow_poly_sigma, 0);
+            scatterDenseFlow();
         });
     }
     smooth.copyTo(previous_dense);
 }
+void VisualFeatureExtractor::Impl::scatterDenseFlow()
+{
+    // Farneback's forward flow lives at old pixels. Move each vector to its
+    // current endpoint so it aligns with the current-frame feature planes.
+    for(int y = 0; y < dense_flow.rows; ++y) {
+        for(int x = 0; x < dense_flow.cols; ++x) {
+            const auto flow = dense_flow.at<cv::Vec2f>(y, x);
+            const double current_x = x + double(flow[0]);
+            const double current_y = y + double(flow[1]);
+            const bool inside = std::isfinite(current_x) && std::isfinite(current_y) &&
+                current_x >= 0 && current_y >= 0 &&
+                current_x <= dense_flow.cols - 1 && current_y <= dense_flow.rows - 1;
+            if(!inside) continue;
+            const int target_x = int(std::floor(current_x + 0.5));
+            const int target_y = int(std::floor(current_y + 0.5));
+            dense_u.at<float>(target_y, target_x) += flow[0];
+            dense_v.at<float>(target_y, target_x) += flow[1];
+            dense_counts.at<float>(target_y, target_x) += 1;
+        }
+    }
+    for(int y = 0; y < dense_counts.rows; ++y) {
+        for(int x = 0; x < dense_counts.cols; ++x) {
+            const float count = dense_counts.at<float>(y, x);
+            if(count == 0) continue;
+            dense_u.at<float>(y, x) /= count;
+            dense_v.at<float>(y, x) /= count;
+            dense_valid.at<unsigned char>(y, x) = 255;
+        }
+    }
+    output.analytical.dense_flow_valid = cv::countNonZero(dense_valid) > 0;
+}
 void VisualFeatureExtractor::Impl::geometricFeatures(double timestamp)
 {
-    auto& d=output.analytical;
-    d.calibration_valid=source_camera.has_value();
-    if(!geometryNeeded()){d.geometry_status="disabled";return;}
-    if(!output.camera){d.geometry_status="calibration_unavailable";return;}
-#ifndef HAVE_VISUAL_MOTION
-    (void)timestamp;d.geometry_status="sparse_motion_not_built";return;
-#else
-    if(!tracker||!output.motion){d.geometry_status="tracking_unavailable";return;}
-    const auto& a=settings.analytical;
-    const auto& m=*output.motion;
-    d.num_sparse_tracks=m.tracked_points;d.num_valid_tracks=tracker->correspondences().size();
-    const auto setTiming=[&](const char* name,double value,bool ran){
-        auto& t=*std::find_if(output.analytical_stages.begin(),output.analytical_stages.end(),[&](const auto& t){return t.name==name;});
-        t.ran=ran;t.elapsed_ms=value;
-    };
-    setTiming("sparse_tracking",m.timing.preprocessing_ms+m.timing.detection_ms+m.timing.flow_ms+m.timing.filtering_ms,true);
-    setTiming("pose",m.timing.geometry_ms,m.tracked_points>0);
-    setTiming("triangulation",m.timing.triangulation_ms,m.triangulation_attempts>0);
-    if(output.frame_id%std::uint64_t(a.pose_interval)==0 && tracker->correspondences().size()>=std::size_t(a.relative_pose.minimum_inliers)) {
-        output.pose_correspondences=tracker->correspondences();
-        output.relative_pose=estimateRelativePose(output.pose_correspondences,*output.camera,a.relative_pose);
-        setTiming("pose",m.timing.geometry_ms+(settings.profiling?output.relative_pose.pose_ms:0),true);
-        setTiming("triangulation",m.timing.triangulation_ms+(settings.profiling?output.relative_pose.triangulation_ms:0),
-            m.triangulation_attempts>0||output.relative_pose.triangulation_ms>0);
+    auto& diagnostics = output.analytical;
+    diagnostics.calibration_valid = source_camera.has_value();
+    if(!geometryNeeded()) {
+        diagnostics.geometry_status = "disabled";
+        return;
     }
-    d.num_pose_inliers=output.relative_pose.valid?std::count(output.relative_pose.inliers.begin(),output.relative_pose.inliers.end(),1):m.accepted_points;
-    d.scale_valid=m.valid&&m.planar_displacement_m.has_value()&&m.pose.has_value();
-    d.num_triangulated_points=m.new_landmarks;
-    if(!m.pose||map_segment!=m.segment_id){output.local_map.clear();seen_landmarks.clear();map_segment=m.segment_id;}
-    if(!d.scale_valid){d.geometry_status=m.metric_status;return;}
-    auto& map=output.local_map;
-    stage("map_update",[&]{
-        map.erase(std::remove_if(map.begin(),map.end(),[&](const LocalMapPoint& p){
-            const auto& q=p.point;return timestamp-p.timestamp_s>a.map_age_s ||
-                cv::norm(cv::Vec3d(q.x,q.y,q.z)-m.pose->position_m)>a.map_radius_m;
-        }),map.end());
-    });
-    stage("voxel",[&]{
-        const auto world_to_camera=invertRigidTransform(detail::nadirTransform(*m.pose));
-        for(const auto& landmark:tracker->landmarks()){
-            if(std::find(seen_landmarks.begin(),seen_landmarks.end(),landmark.track_id)!=seen_landmarks.end())continue;
-            const auto& p=landmark.point.world_m;
-            if(cv::norm(p-m.pose->position_m)>a.map_radius_m)continue;
-            const auto cam=transformPoint(world_to_camera,p);if(cam[2]<=0)continue;
-            const auto& k=*output.camera;const double u=k.fx*cam[0]/cam[2]+k.cx,v=k.fy*cam[1]/cam[2]+k.cy;
-            if(!std::isfinite(u)||!std::isfinite(v)||u<0||v<0||u>=k.width||v>=k.height)continue;
-            const auto color=output.bgr.at<cv::Vec3b>(int(v),int(u));
-            LocalMapPoint item;item.point={float(p[0]),float(p[1]),float(p[2]),color[2],color[1],color[0]};
-            item.track_id=landmark.track_id;item.timestamp_s=timestamp;
-            item.reprojection_error_px=landmark.point.reprojection_error_px;
-            item.confidence=m.quality/(1+item.reprojection_error_px/settings.motion.triangulation_limits.maximum_reprojection_error_px);
-            auto same=std::find_if(map.begin(),map.end(),[&](const auto& old){
-                return std::floor(old.point.x/a.voxel_size_m)==std::floor(item.point.x/a.voxel_size_m)&&
-                    std::floor(old.point.y/a.voxel_size_m)==std::floor(item.point.y/a.voxel_size_m)&&
-                    std::floor(old.point.z/a.voxel_size_m)==std::floor(item.point.z/a.voxel_size_m);
-            });
-            if(same!=map.end()){
-                VoxelGridAccumulator merged(a.voxel_size_m,2);merged.add(same->point);merged.add(item.point);
-                const auto points=merged.points();
-                if(points.size()==1)item.point=points.front();
-                item.observations=same->observations+1;item.confidence=std::min(item.confidence,same->confidence);*same=item;
-            }else map.push_back(item);
-        }
-        seen_landmarks.clear();for(const auto& p:tracker->landmarks())seen_landmarks.push_back(p.track_id);
-        if(map.size()>a.maximum_map_points)map.erase(map.begin(),map.begin()+(map.size()-a.maximum_map_points));
-    });
-    d.local_map_point_count=map.size();d.num_valid_3d_points=map.size();
-    if(map.empty()){d.geometry_status="insufficient_parallax_or_support";return;}
-    std::vector<ColoredPoint> cloud;cloud.reserve(map.size());double error=0;
-    for(const auto& p:map){cloud.push_back(p.point);error+=p.reprojection_error_px;}
-    d.mean_reprojection_error=error/map.size();
-    // Preflight bounds: exceeding the chosen grid budget is unavailable geometry,
-    // not a reason to allocate a larger grid or stop 2-D extraction.
-    const auto bounds=computeBounds(cloud);
-    const double cols=std::ceil((bounds.maximum[0]-bounds.minimum[0])/a.grid_resolution_m)+1;
-    const double rows=std::ceil((bounds.maximum[1]-bounds.minimum[1])/a.grid_resolution_m)+1;
-    if(cols*rows>a.maximum_grid_cells){d.geometry_status="grid_budget_exceeded";return;}
-    stage("terrain_grid",[&]{output.terrain=createTerrainGrid(cloud,a.grid_resolution_m,a.maximum_grid_cells);});
-    if(a.idw.enabled)stage("idw",[&]{interpolateIdw(output.terrain,a.idw);});
-    auto surface=a.surface;surface.gradients=analytic(AnalyticFeature::Slope);
-    surface.slope=analytic(AnalyticFeature::Slope);surface.roughness=analytic(AnalyticFeature::Roughness);
-    output.surface=measureSurface(output.terrain,surface);
-    setTiming("terrain_gradients",output.surface.gradients_ms,surface.gradients);
-    setTiming("slope",output.surface.slope_ms,surface.slope);
-    setTiming("diffusion",output.surface.diffusion_ms,surface.roughness&&surface.diffusion_iterations>0);
-    setTiming("roughness",output.surface.roughness_ms,surface.roughness);
-    cv::Mat confidence(output.terrain.height,output.terrain.width,CV_32F,cv::Scalar(0));
-    // Confidence is a support score, not a calibrated probability. Distance,
-    // observation age, measured/interpolated provenance and pose health reduce it.
-    stage("map_update",[&]{
-        const auto& grid=output.terrain;
-        for(int y=0;y<grid.height;++y)for(int x=0;x<grid.width;++x){
-            const auto i=grid.index(y,x);if(!grid.validity[i])continue;
-            const double wx=grid.minimum_x_m+x*grid.resolution_m,wy=grid.maximum_y_m-y*grid.resolution_m;
-            double nearest=std::numeric_limits<double>::infinity(),quality=0;
-            for(const auto& p:map){const double distance=std::hypot(p.point.x-wx,p.point.y-wy);
-                if(distance<nearest){nearest=distance;quality=p.confidence*std::max(0.0,1-(timestamp-p.timestamp_s)/a.map_age_s);}}
-            confidence.at<float>(y,x)=float(std::min(quality,m.quality)*(grid.validity[i]==255?1:0.5)/
-                (1+nearest/grid.resolution_m));
-        }
-    });
-    detail::ProjectedGeometry projected;
-    stage("projection",[&]{projected=detail::projectSurface(output.terrain,output.surface,confidence,*output.camera,
-        detail::nadirTransform(*m.pose),a.grid_size,settings.motion.triangulation_limits.maximum_depth_m,false);});
-    // Separate depth derivatives from projection for ablation and profiling.
-    if(analytic(AnalyticFeature::DepthGradients))stage("depth_gradients",[&]{
-        detail::depthGradients(projected,detail::resizeCamera(*output.camera,a.grid_size));
-    });
-    for(int i=0;i<6;++i){bank[22+i]=projected.planes[i];bank_masks[22+i]=projected.masks[i];}
-    output.geometry_confidence=projected.planes[5];
-    d.geometry_coverage_percent=100.0*cv::countNonZero(projected.masks[0])/a.grid_size.area();
-    d.geometry_valid=d.geometry_coverage_percent>0;d.geometry_status=d.geometry_valid?"metric_nadir_local_map":"outside_current_view";
+    if(!output.camera) {
+        diagnostics.geometry_status = "calibration_unavailable";
+        return;
+    }
+#ifndef HAVE_VISUAL_MOTION
+    (void)timestamp;
+    diagnostics.geometry_status = "sparse_motion_not_built";
+#else
+    if(!tracker || !output.motion) {
+        diagnostics.geometry_status = "tracking_unavailable";
+        return;
+    }
+
+    const auto& motion = *output.motion;
+    updateRelativePose(motion);
+    diagnostics.scale_valid = motion.valid &&
+        motion.planar_displacement_m.has_value() && motion.pose.has_value();
+    diagnostics.num_triangulated_points = motion.new_landmarks;
+    resetMapSegment(motion);
+    if(!diagnostics.scale_valid) {
+        diagnostics.geometry_status = motion.metric_status;
+        return;
+    }
+
+    pruneLocalMap(timestamp, motion);
+    addNewLandmarks(timestamp, motion);
+    diagnostics.local_map_point_count = output.local_map.size();
+    diagnostics.num_valid_3d_points = output.local_map.size();
+    if(output.local_map.empty()) {
+        diagnostics.geometry_status = "insufficient_parallax_or_support";
+        return;
+    }
+
+    const auto cloud = localCloud();
+    if(!buildTerrain(cloud)) return;
+    const cv::Mat confidence = terrainConfidence(timestamp, motion);
+    projectGeometry(confidence, motion);
 #endif
 }
-void VisualFeatureExtractor::Impl::packTensor()
+#ifdef HAVE_VISUAL_MOTION
+void VisualFeatureExtractor::Impl::updateRelativePose(const MotionEstimate& motion)
 {
-    const auto& a=settings.analytical;auto& tensor=output.feature_tensor;
-    tensor.channel_names.clear();tensor.channel_valid.clear();
-    for(int i=0;i<28;++i)if(analytic(channel_family[i]))tensor.channel_names.emplace_back(channel_names[i]);
-    if(tensor.channel_names.empty()){tensor.values.release();tensor.valid.release();return;}
-    const int shape[]={1,int(tensor.channel_names.size()),a.grid_size.height,a.grid_size.width};
-    tensor.values.create(a.batch_dimension?4:3,shape+(a.batch_dimension?0:1),CV_32F);
-    tensor.valid.create(a.batch_dimension?4:3,shape+(a.batch_dimension?0:1),CV_8U);
-    std::array<cv::Mat,28> reduced,masks;
-    stage("resizing",[&]{
-        for(int i=0;i<28;++i)if(analytic(channel_family[i])){
-            if(bank[i].empty()){
-                reduced[i]=cv::Mat::zeros(a.grid_size,CV_32F);masks[i]=cv::Mat::zeros(a.grid_size,CV_8U);
-                if(i==27)masks[i].setTo(255); // Missing geometry confidence is a known zero.
-            }else if(bank[i].size()==a.grid_size){reduced[i]=bank[i];masks[i]=bank_masks[i];}
-            else if(bank_masks[i].empty()){
-                cv::resize(bank[i],reduced[i],a.grid_size,0,0,cv::INTER_AREA);
-                // Occupancy-aware binary pooling: any supporting edge occupies cell.
-                if(i==16||i==17){cv::compare(reduced[i],0,reduced[i],cv::CMP_GT);reduced[i].convertTo(reduced[i],CV_32F,1.0/255);}
-            }else{
-                cv::Mat weights,weighted,counts;
-                bank_masks[i].convertTo(weights,CV_32F,1.0/255);cv::multiply(bank[i],weights,weighted);
-                cv::resize(weighted,reduced[i],a.grid_size,0,0,cv::INTER_AREA);cv::resize(weights,counts,a.grid_size,0,0,cv::INTER_AREA);
-                cv::compare(counts,0.5,masks[i],cv::CMP_GE);cv::max(counts,1e-6,counts);cv::divide(reduced[i],counts,reduced[i]);
-                reduced[i].setTo(0,masks[i]==0);
+    auto& diagnostics = output.analytical;
+    const auto& analytical = settings.analytical;
+    diagnostics.num_sparse_tracks = motion.tracked_points;
+    diagnostics.num_valid_tracks = tracker->correspondences().size();
+    setAnalyticalTiming("sparse_tracking",
+        motion.timing.preprocessing_ms + motion.timing.detection_ms +
+        motion.timing.flow_ms + motion.timing.filtering_ms, true);
+    setAnalyticalTiming("pose", motion.timing.geometry_ms, motion.tracked_points > 0);
+    setAnalyticalTiming("triangulation", motion.timing.triangulation_ms,
+        motion.triangulation_attempts > 0);
+
+    const bool pose_frame = output.frame_id % std::uint64_t(analytical.pose_interval) == 0;
+    const bool enough_points = tracker->correspondences().size() >=
+        std::size_t(analytical.relative_pose.minimum_inliers);
+    if(pose_frame && enough_points) {
+        output.pose_correspondences = tracker->correspondences();
+        output.relative_pose = estimateRelativePose(
+            output.pose_correspondences, *output.camera, analytical.relative_pose);
+        const double pose_ms = settings.profiling ? output.relative_pose.pose_ms : 0;
+        const double triangulation_ms = settings.profiling ?
+            output.relative_pose.triangulation_ms : 0;
+        setAnalyticalTiming("pose", motion.timing.geometry_ms + pose_ms, true);
+        setAnalyticalTiming("triangulation",
+            motion.timing.triangulation_ms + triangulation_ms,
+            motion.triangulation_attempts > 0 || triangulation_ms > 0);
+    }
+    diagnostics.num_pose_inliers = output.relative_pose.valid ?
+        std::count(output.relative_pose.inliers.begin(), output.relative_pose.inliers.end(), 1) :
+        motion.accepted_points;
+}
+void VisualFeatureExtractor::Impl::resetMapSegment(const MotionEstimate& motion)
+{
+    if(motion.pose && map_segment == motion.segment_id) return;
+    output.local_map.clear();
+    seen_landmarks.clear();
+    map_segment = motion.segment_id;
+}
+void VisualFeatureExtractor::Impl::pruneLocalMap(
+    double timestamp, const MotionEstimate& motion)
+{
+    const auto& analytical = settings.analytical;
+    stage("map_update", [&] {
+        output.local_map.erase(std::remove_if(
+            output.local_map.begin(), output.local_map.end(),
+            [&](const LocalMapPoint& point) {
+                const auto& p = point.point;
+                const bool expired = timestamp - point.timestamp_s > analytical.map_age_s;
+                const bool distant = cv::norm(
+                    cv::Vec3d(p.x, p.y, p.z) - motion.pose->position_m) >
+                    analytical.map_radius_m;
+                return expired || distant;
+            }), output.local_map.end());
+    });
+}
+void VisualFeatureExtractor::Impl::addNewLandmarks(
+    double timestamp, const MotionEstimate& motion)
+{
+    const auto& analytical = settings.analytical;
+    stage("voxel", [&] {
+        const auto world_to_camera = invertRigidTransform(detail::nadirTransform(*motion.pose));
+        for(const auto& landmark : tracker->landmarks()) {
+            if(std::find(seen_landmarks.begin(), seen_landmarks.end(), landmark.track_id) !=
+               seen_landmarks.end()) continue;
+
+            const auto& world = landmark.point.world_m;
+            if(cv::norm(world - motion.pose->position_m) > analytical.map_radius_m) continue;
+            const auto camera_point = transformPoint(world_to_camera, world);
+            if(camera_point[2] <= 0) continue;
+
+            const auto& camera = *output.camera;
+            const double u = camera.fx * camera_point[0] / camera_point[2] + camera.cx;
+            const double v = camera.fy * camera_point[1] / camera_point[2] + camera.cy;
+            if(!std::isfinite(u) || !std::isfinite(v) ||
+               u < 0 || v < 0 || u >= camera.width || v >= camera.height) continue;
+
+            const auto color = output.bgr.at<cv::Vec3b>(int(v), int(u));
+            LocalMapPoint item;
+            item.point = {float(world[0]), float(world[1]), float(world[2]),
+                          color[2], color[1], color[0]};
+            item.track_id = landmark.track_id;
+            item.timestamp_s = timestamp;
+            item.reprojection_error_px = landmark.point.reprojection_error_px;
+            item.confidence = motion.quality /
+                (1 + item.reprojection_error_px /
+                    settings.motion.triangulation_limits.maximum_reprojection_error_px);
+
+            const auto same_voxel = [&](const LocalMapPoint& old) {
+                const double size = analytical.voxel_size_m;
+                return std::floor(old.point.x / size) == std::floor(item.point.x / size) &&
+                       std::floor(old.point.y / size) == std::floor(item.point.y / size) &&
+                       std::floor(old.point.z / size) == std::floor(item.point.z / size);
+            };
+            auto existing = std::find_if(
+                output.local_map.begin(), output.local_map.end(), same_voxel);
+            if(existing == output.local_map.end()) {
+                output.local_map.push_back(item);
+                continue;
+            }
+
+            VoxelGridAccumulator merged(analytical.voxel_size_m, 2);
+            merged.add(existing->point);
+            merged.add(item.point);
+            const auto points = merged.points();
+            if(points.size() == 1) item.point = points.front();
+            item.observations = existing->observations + 1;
+            item.confidence = std::min(item.confidence, existing->confidence);
+            *existing = item;
+        }
+
+        seen_landmarks.clear();
+        for(const auto& landmark : tracker->landmarks())
+            seen_landmarks.push_back(landmark.track_id);
+        if(output.local_map.size() > analytical.maximum_map_points) {
+            const auto excess = output.local_map.size() - analytical.maximum_map_points;
+            output.local_map.erase(output.local_map.begin(), output.local_map.begin() + excess);
+        }
+    });
+}
+std::vector<ColoredPoint> VisualFeatureExtractor::Impl::localCloud()
+{
+    std::vector<ColoredPoint> cloud;
+    cloud.reserve(output.local_map.size());
+    double total_error = 0;
+    for(const auto& point : output.local_map) {
+        cloud.push_back(point.point);
+        total_error += point.reprojection_error_px;
+    }
+    output.analytical.mean_reprojection_error = total_error / output.local_map.size();
+    return cloud;
+}
+bool VisualFeatureExtractor::Impl::buildTerrain(const std::vector<ColoredPoint>& cloud)
+{
+    const auto& analytical = settings.analytical;
+    const auto bounds = computeBounds(cloud);
+    const double columns = std::ceil(
+        (bounds.maximum[0] - bounds.minimum[0]) / analytical.grid_resolution_m) + 1;
+    const double rows = std::ceil(
+        (bounds.maximum[1] - bounds.minimum[1]) / analytical.grid_resolution_m) + 1;
+    if(columns * rows > analytical.maximum_grid_cells) {
+        output.analytical.geometry_status = "grid_budget_exceeded";
+        return false;
+    }
+
+    stage("terrain_grid", [&] {
+        output.terrain = createTerrainGrid(
+            cloud, analytical.grid_resolution_m, analytical.maximum_grid_cells);
+    });
+    if(analytical.idw.enabled)
+        stage("idw", [&] { interpolateIdw(output.terrain, analytical.idw); });
+
+    auto surface_settings = analytical.surface;
+    surface_settings.gradients = analytic(AnalyticFeature::Slope);
+    surface_settings.slope = analytic(AnalyticFeature::Slope);
+    surface_settings.roughness = analytic(AnalyticFeature::Roughness);
+    output.surface = measureSurface(output.terrain, surface_settings);
+    setAnalyticalTiming("terrain_gradients", output.surface.gradients_ms,
+        surface_settings.gradients);
+    setAnalyticalTiming("slope", output.surface.slope_ms, surface_settings.slope);
+    setAnalyticalTiming("diffusion", output.surface.diffusion_ms,
+        surface_settings.roughness && surface_settings.diffusion_iterations > 0);
+    setAnalyticalTiming("roughness", output.surface.roughness_ms,
+        surface_settings.roughness);
+    return true;
+}
+cv::Mat VisualFeatureExtractor::Impl::terrainConfidence(
+    double timestamp, const MotionEstimate& motion)
+{
+    const auto& analytical = settings.analytical;
+    cv::Mat confidence(output.terrain.height, output.terrain.width, CV_32F, cv::Scalar(0));
+    // This is a support score rather than a calibrated probability.
+    stage("map_update", [&] {
+        const auto& grid = output.terrain;
+        for(int y = 0; y < grid.height; ++y) {
+            for(int x = 0; x < grid.width; ++x) {
+                const auto index = grid.index(y, x);
+                if(!grid.validity[index]) continue;
+                const double world_x = grid.minimum_x_m + x * grid.resolution_m;
+                const double world_y = grid.maximum_y_m - y * grid.resolution_m;
+                double nearest = std::numeric_limits<double>::infinity();
+                double quality = 0;
+                for(const auto& point : output.local_map) {
+                    const double distance = std::hypot(
+                        point.point.x - world_x, point.point.y - world_y);
+                    if(distance >= nearest) continue;
+                    nearest = distance;
+                    const double age = std::max(
+                        0.0, 1 - (timestamp - point.timestamp_s) / analytical.map_age_s);
+                    quality = point.confidence * age;
+                }
+                const double measured_weight = grid.validity[index] == 255 ? 1.0 : 0.5;
+                confidence.at<float>(y, x) = float(
+                    std::min(quality, motion.quality) * measured_weight /
+                    (1 + nearest / grid.resolution_m));
             }
         }
     });
-    stage("packing",[&]{
-        std::size_t c=0;
-        for(int i=0;i<28;++i)if(analytic(channel_family[i])){
-            auto dest=tensor.plane(c),mask=tensor.mask(c);
-            if(masks[i].empty())mask.setTo(255);else masks[i].copyTo(mask);
-            double scale=1,low=0,high=1;
-            if(i==3||i==4){scale=2;low=-1;}
-            if(i==5||i==18||i==19)scale=std::sqrt(2.0);
-            if(i==15){scale=1/a.harris_scale;low=-1;}
-            if(i==20||i==21){scale=1/a.flow_scale_px;low=-1;}
-            if(i==22)scale=1/a.depth_scale_m;
-            if(i==23||i==24){scale=1/a.depth_gradient_scale;low=-1;}
-            if(i==25)scale=2/CV_PI;
-            if(i==26)scale=1/a.roughness_scale_m;
-            if(i==15) {
-                // Fixed signed square-root compresses the fourth-order Harris
-                // response without depending on this frame's strongest corner.
-                for(int y=0;y<dest.rows;++y)for(int x=0;x<dest.cols;++x) {
-                    const float r=reduced[i].at<float>(y,x);
-                    dest.at<float>(y,x)=float(std::copysign(std::sqrt(std::abs(r))*scale,r));
-                }
-            } else reduced[i].convertTo(dest,CV_32F,scale);
-            cv::max(dest,low,dest);cv::min(dest,high,dest);
-            dest.setTo(0,mask==0);tensor.channel_valid.push_back(cv::countNonZero(mask)>0);++c;
+    return confidence;
+}
+void VisualFeatureExtractor::Impl::projectGeometry(
+    const cv::Mat& confidence, const MotionEstimate& motion)
+{
+    const auto& analytical = settings.analytical;
+    detail::ProjectedGeometry projected;
+    stage("projection", [&] {
+        projected = detail::projectSurface(
+            output.terrain, output.surface, confidence, *output.camera,
+            detail::nadirTransform(*motion.pose), analytical.grid_size,
+            settings.motion.triangulation_limits.maximum_depth_m, false);
+    });
+    if(analytic(AnalyticFeature::DepthGradients)) {
+        stage("depth_gradients", [&] {
+            detail::depthGradients(
+                projected, detail::resizeCamera(*output.camera, analytical.grid_size));
+        });
+    }
+    for(int i = 0; i < 6; ++i) {
+        bank[22 + i] = projected.planes[i];
+        bank_masks[22 + i] = projected.masks[i];
+    }
+    output.geometry_confidence = projected.planes[5];
+    auto& diagnostics = output.analytical;
+    diagnostics.geometry_coverage_percent =
+        100.0 * cv::countNonZero(projected.masks[0]) / analytical.grid_size.area();
+    diagnostics.geometry_valid = diagnostics.geometry_coverage_percent > 0;
+    diagnostics.geometry_status = diagnostics.geometry_valid ?
+        "metric_nadir_local_map" : "outside_current_view";
+}
+#endif
+void VisualFeatureExtractor::Impl::packTensor()
+{
+    const auto& analytical = settings.analytical;
+    auto& tensor = output.feature_tensor;
+    tensor.channel_names.clear();
+    tensor.channel_valid.clear();
+    for(int channel = 0; channel < 28; ++channel) {
+        if(analytic(channel_family[channel]))
+            tensor.channel_names.emplace_back(channel_names[channel]);
+    }
+    if(tensor.channel_names.empty()) {
+        tensor.values.release();
+        tensor.valid.release();
+        return;
+    }
+
+    const int shape[] = {1, int(tensor.channel_names.size()),
+                         analytical.grid_size.height, analytical.grid_size.width};
+    const bool batched = analytical.batch_dimension;
+    tensor.values.create(batched ? 4 : 3, shape + (batched ? 0 : 1), CV_32F);
+    tensor.valid.create(batched ? 4 : 3, shape + (batched ? 0 : 1), CV_8U);
+
+    std::array<cv::Mat, 28> reduced;
+    std::array<cv::Mat, 28> masks;
+    stage("resizing", [&] {
+        for(int channel = 0; channel < 28; ++channel) {
+            if(analytic(channel_family[channel]))
+                reduceChannel(channel, reduced[channel], masks[channel]);
         }
     });
-    output.analytical.payload_bytes=tensor.values.total()*sizeof(float)+tensor.valid.total()+
-        output.local_map.size()*sizeof(LocalMapPoint);
+    stage("packing", [&] {
+        std::size_t packed_channel = 0;
+        for(int channel = 0; channel < 28; ++channel) {
+            if(!analytic(channel_family[channel])) continue;
+            auto destination = tensor.plane(packed_channel);
+            auto valid = tensor.mask(packed_channel);
+            if(masks[channel].empty()) valid.setTo(255);
+            else masks[channel].copyTo(valid);
+            normalizeChannel(channel, reduced[channel], destination);
+            destination.setTo(0, valid == 0);
+            tensor.channel_valid.push_back(cv::countNonZero(valid) > 0);
+            ++packed_channel;
+        }
+    });
+    output.analytical.payload_bytes =
+        tensor.values.total() * sizeof(float) + tensor.valid.total() +
+        output.local_map.size() * sizeof(LocalMapPoint);
+}
+void VisualFeatureExtractor::Impl::reduceChannel(
+    int channel, cv::Mat& values, cv::Mat& valid)
+{
+    const auto grid = settings.analytical.grid_size;
+    if(bank[channel].empty()) {
+        values = cv::Mat::zeros(grid, CV_32F);
+        valid = cv::Mat::zeros(grid, CV_8U);
+        if(channel == 27) valid.setTo(255); // A missing confidence score is a known zero.
+        return;
+    }
+    if(bank[channel].size() == grid) {
+        values = bank[channel];
+        valid = bank_masks[channel];
+        return;
+    }
+    if(bank_masks[channel].empty()) {
+        cv::resize(bank[channel], values, grid, 0, 0, cv::INTER_AREA);
+        if(channel == 16 || channel == 17) {
+            // One contributing edge is enough for the output cell to be occupied.
+            cv::compare(values, 0, values, cv::CMP_GT);
+            values.convertTo(values, CV_32F, 1.0 / 255);
+        }
+        return;
+    }
+
+    cv::Mat weights, weighted, support;
+    bank_masks[channel].convertTo(weights, CV_32F, 1.0 / 255);
+    cv::multiply(bank[channel], weights, weighted);
+    cv::resize(weighted, values, grid, 0, 0, cv::INTER_AREA);
+    cv::resize(weights, support, grid, 0, 0, cv::INTER_AREA);
+    cv::compare(support, 0.5, valid, cv::CMP_GE);
+    cv::max(support, 1e-6, support);
+    cv::divide(values, support, values);
+    values.setTo(0, valid == 0);
+}
+void VisualFeatureExtractor::Impl::normalizeChannel(
+    int channel, const cv::Mat& source, cv::Mat& destination)
+{
+    const auto& analytical = settings.analytical;
+    double scale = 1;
+    double minimum = 0;
+    if(channel == 3 || channel == 4) { scale = 2; minimum = -1; }
+    if(channel == 5 || channel == 18 || channel == 19) scale = std::sqrt(2.0);
+    if(channel == 15) { scale = 1 / analytical.harris_scale; minimum = -1; }
+    if(channel == 20 || channel == 21) {
+        scale = 1 / analytical.flow_scale_px;
+        minimum = -1;
+    }
+    if(channel == 22) scale = 1 / analytical.depth_scale_m;
+    if(channel == 23 || channel == 24) {
+        scale = 1 / analytical.depth_gradient_scale;
+        minimum = -1;
+    }
+    if(channel == 25) scale = 2 / CV_PI;
+    if(channel == 26) scale = 1 / analytical.roughness_scale_m;
+
+    if(channel == 15) {
+        // A fixed signed square root compresses Harris response without using
+        // the current frame's strongest corner as a scale.
+        for(int y = 0; y < destination.rows; ++y) {
+            for(int x = 0; x < destination.cols; ++x) {
+                const float response = source.at<float>(y, x);
+                destination.at<float>(y, x) = float(std::copysign(
+                    std::sqrt(std::abs(response)) * scale, response));
+            }
+        }
+    } else {
+        source.convertTo(destination, CV_32F, scale);
+    }
+    cv::max(destination, minimum, destination);
+    cv::min(destination, 1, destination);
 }
 } // namespace metric_mapping

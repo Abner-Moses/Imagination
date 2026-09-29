@@ -435,54 +435,151 @@ std::optional<CameraIntrinsics> loadVisualCalibration(const std::filesystem::pat
     if(!file["distortion"].empty())file["distortion"]>>distortion;
     return k;
 }
+namespace {
+class AnalyticalConfigReader {
+public:
+    explicit AnalyticalConfigReader(cv::FileNode root) : root_(root) {}
+
+    bool contains(const char* key) const { return !root_[key].empty(); }
+    std::string text(const char* key) const { return std::string(root_[key]); }
+
+    void integer(const char* key, int& value) const
+    {
+        if(contains(key)) value = readInt(root_, key, "analytical");
+    }
+    void number(const char* key, double& value) const
+    {
+        if(contains(key)) value = readFiniteDouble(root_, key, "analytical");
+    }
+    void size(const char* key, std::size_t& value) const
+    {
+        if(contains(key)) value = readSize(root_, key, "analytical");
+    }
+    void boolean(const char* key, bool& value) const
+    {
+        if(!contains(key)) return;
+        const int number = readInt(root_, key, "analytical");
+        if(number != 0 && number != 1)
+            throw std::runtime_error(std::string(key) + " must be 0 or 1");
+        value = number != 0;
+    }
+    void rejectUnknown(const std::vector<std::string>& known) const
+    {
+        for(const auto& node : root_) {
+            if(std::find(known.begin(), known.end(), node.name()) == known.end())
+                throw std::runtime_error("Unknown analytical setting: " + node.name());
+        }
+    }
+
+private:
+    cv::FileNode root_;
+};
+} // namespace
+
 VisualFeatureSettings loadAnalyticalConfig(const std::filesystem::path& path)
 {
-    auto s=analyticalFeatureSettings();
+    auto s = analyticalFeatureSettings();
     cv::FileStorage file(path.string(),cv::FileStorage::READ);
-    if(!file.isOpened())throw std::runtime_error("Cannot open analytical config: "+path.string());
-    auto root=file.root();auto& a=s.analytical;
+    if(!file.isOpened())
+        throw std::runtime_error("Cannot open analytical config: " + path.string());
+    const AnalyticalConfigReader config(file.root());
+    auto& a = s.analytical;
     // Strict key checking catches misspelled ablations rather than silently running them.
-    const auto integer=[&](const char* key,int& value){if(!root[key].empty())value=readInt(root,key,"analytical");};
-    const auto number=[&](const char* key,double& value){if(!root[key].empty())value=readFiniteDouble(root,key,"analytical");};
-    const auto boolean=[&](const char* key,bool& value){if(!root[key].empty()){int n=readInt(root,key,"analytical");if(n!=0&&n!=1)throw std::runtime_error("Boolean must be 0 or 1");value=n!=0;}};
-    if(!root["features"].empty())a.features=selectAnalyticFeatures(std::string(root["features"]));
-    if(!root["comparison_features"].empty())s.features=selectVisualFeatures(std::string(root["comparison_features"]));
-    integer("working_width",a.working_size.width);integer("working_height",a.working_size.height);
-    integer("grid_width",a.grid_size.width);integer("grid_height",a.grid_size.height);
-    integer("gaussian_kernel",a.gaussian_kernel);number("gaussian_sigma",a.gaussian_sigma);
-    number("harris_k",a.harris_k);number("harris_scale",a.harris_scale);
-    number("canny_low",s.canny_low);number("canny_high",s.canny_high);
-    number("flow_scale_px",a.flow_scale_px);number("depth_scale_m",a.depth_scale_m);
-    number("depth_gradient_scale",a.depth_gradient_scale);number("roughness_scale_m",a.roughness_scale_m);
-    integer("flow_levels",a.flow_levels);integer("flow_window",a.flow_window);integer("flow_iterations",a.flow_iterations);
-    integer("flow_poly_n",a.flow_poly_n);number("flow_pyramid_scale",a.flow_pyramid_scale);number("flow_poly_sigma",a.flow_poly_sigma);
-    boolean("enable_geometry",a.enable_geometry);boolean("batch_dimension",a.batch_dimension);integer("pose_interval",a.pose_interval);
-    number("map_radius_m",a.map_radius_m);number("map_age_s",a.map_age_s);number("voxel_size_m",a.voxel_size_m);number("grid_resolution_m",a.grid_resolution_m);
-    if(!root["maximum_map_points"].empty())a.maximum_map_points=readSize(root,"maximum_map_points","analytical");
-    if(!root["maximum_grid_cells"].empty())a.maximum_grid_cells=readSize(root,"maximum_grid_cells","analytical");
-    boolean("idw_enabled",a.idw.enabled);number("idw_radius_m",a.idw.search_radius_m);number("idw_maximum_distance_m",a.idw.maximum_interpolation_distance_m);
-    number("idw_power",a.idw.power);integer("idw_minimum_neighbors",a.idw.minimum_neighbors);integer("idw_maximum_neighbors",a.idw.maximum_neighbors);
-    integer("diffusion_iterations",a.surface.diffusion_iterations);number("diffusion_time_step",a.surface.diffusion_time_step);
-    number("diffusion_conductance_m",a.surface.diffusion_conductance_m);integer("roughness_window",a.surface.roughness_window);
-    integer("maximum_tracks",s.motion.maximum_tracks);integer("replenish_below",s.motion.replenish_below);
-    number("corner_quality",s.motion.corner_quality);number("corner_distance_px",s.motion.corner_distance_px);integer("corner_block_size",s.motion.corner_block_size);
-    boolean("forward_backward",s.motion.forward_backward);boolean("require_imu",s.motion.require_imu);
-    integer("triangulation_interval",s.motion.triangulation_interval);integer("maximum_triangulations_per_frame",s.motion.maximum_triangulations_per_frame);
-    number("minimum_baseline_m",s.motion.triangulation_limits.minimum_baseline_m);
-    number("minimum_parallax_rad",s.motion.triangulation_limits.minimum_parallax_rad);
-    number("maximum_reprojection_error_px",s.motion.triangulation_limits.maximum_reprojection_error_px);
-    number("maximum_depth_m",s.motion.triangulation_limits.maximum_depth_m);
-    integer("pose_minimum_inliers",a.relative_pose.minimum_inliers);
-    integer("pose_maximum_iterations",a.relative_pose.maximum_iterations);
-    integer("pose_maximum_points",a.relative_pose.maximum_points);
-    number("pose_threshold_px",a.relative_pose.threshold_px);
-    number("pose_minimum_parallax_rad",a.relative_pose.minimum_parallax_rad);
-    number("pose_maximum_reprojection_error_px",a.relative_pose.maximum_reprojection_error_px);
-    number("pose_maximum_relative_depth",a.relative_pose.maximum_relative_depth);
-    const std::vector<std::string> known_keys={"batch_dimension","canny_high","canny_low","comparison_features","corner_block_size","corner_distance_px","corner_quality","depth_gradient_scale","depth_scale_m","diffusion_conductance_m","diffusion_iterations","diffusion_time_step","enable_geometry","features","flow_iterations","flow_levels","flow_poly_n","flow_poly_sigma","flow_pyramid_scale","flow_scale_px","flow_window","forward_backward","gaussian_kernel","gaussian_sigma","grid_height","grid_resolution_m","grid_width","harris_k","harris_scale","idw_enabled","idw_maximum_distance_m","idw_maximum_neighbors","idw_minimum_neighbors","idw_power","idw_radius_m","map_age_s","map_radius_m","maximum_depth_m","maximum_grid_cells","maximum_map_points","maximum_reprojection_error_px","maximum_tracks","maximum_triangulations_per_frame","minimum_baseline_m","minimum_parallax_rad","pose_interval","pose_maximum_iterations","pose_maximum_points","pose_maximum_relative_depth","pose_maximum_reprojection_error_px","pose_minimum_inliers","pose_minimum_parallax_rad","pose_threshold_px","replenish_below","require_imu","roughness_scale_m","roughness_window","triangulation_interval","voxel_size_m","working_height","working_width"};
-    for(const auto& node:root)if(std::find(known_keys.begin(),known_keys.end(),node.name())==known_keys.end())
-        throw std::runtime_error("Unknown analytical setting: "+node.name());
-    detail::validateAnalyticalSettings(s);return s;
+    if(config.contains("features"))
+        a.features = selectAnalyticFeatures(config.text("features"));
+    if(config.contains("comparison_features"))
+        s.features = selectVisualFeatures(config.text("comparison_features"));
+
+    config.integer("working_width", a.working_size.width);
+    config.integer("working_height", a.working_size.height);
+    config.integer("grid_width", a.grid_size.width);
+    config.integer("grid_height", a.grid_size.height);
+    config.integer("gaussian_kernel", a.gaussian_kernel);
+    config.number("gaussian_sigma", a.gaussian_sigma);
+    config.number("harris_k", a.harris_k);
+    config.number("harris_scale", a.harris_scale);
+    config.number("canny_low", s.canny_low);
+    config.number("canny_high", s.canny_high);
+    config.number("flow_scale_px", a.flow_scale_px);
+    config.number("depth_scale_m", a.depth_scale_m);
+    config.number("depth_gradient_scale", a.depth_gradient_scale);
+    config.number("roughness_scale_m", a.roughness_scale_m);
+    config.integer("flow_levels", a.flow_levels);
+    config.integer("flow_window", a.flow_window);
+    config.integer("flow_iterations", a.flow_iterations);
+    config.integer("flow_poly_n", a.flow_poly_n);
+    config.number("flow_pyramid_scale", a.flow_pyramid_scale);
+    config.number("flow_poly_sigma", a.flow_poly_sigma);
+    config.boolean("enable_geometry", a.enable_geometry);
+    config.boolean("batch_dimension", a.batch_dimension);
+    config.integer("pose_interval", a.pose_interval);
+    config.number("map_radius_m", a.map_radius_m);
+    config.number("map_age_s", a.map_age_s);
+    config.number("voxel_size_m", a.voxel_size_m);
+    config.number("grid_resolution_m", a.grid_resolution_m);
+    config.size("maximum_map_points", a.maximum_map_points);
+    config.size("maximum_grid_cells", a.maximum_grid_cells);
+    config.boolean("idw_enabled", a.idw.enabled);
+    config.number("idw_radius_m", a.idw.search_radius_m);
+    config.number("idw_maximum_distance_m", a.idw.maximum_interpolation_distance_m);
+    config.number("idw_power", a.idw.power);
+    config.integer("idw_minimum_neighbors", a.idw.minimum_neighbors);
+    config.integer("idw_maximum_neighbors", a.idw.maximum_neighbors);
+    config.integer("diffusion_iterations", a.surface.diffusion_iterations);
+    config.number("diffusion_time_step", a.surface.diffusion_time_step);
+    config.number("diffusion_conductance_m", a.surface.diffusion_conductance_m);
+    config.integer("roughness_window", a.surface.roughness_window);
+    config.integer("maximum_tracks", s.motion.maximum_tracks);
+    config.integer("replenish_below", s.motion.replenish_below);
+    config.number("corner_quality", s.motion.corner_quality);
+    config.number("corner_distance_px", s.motion.corner_distance_px);
+    config.integer("corner_block_size", s.motion.corner_block_size);
+    config.boolean("forward_backward", s.motion.forward_backward);
+    config.boolean("require_imu", s.motion.require_imu);
+    config.integer("triangulation_interval", s.motion.triangulation_interval);
+    config.integer("maximum_triangulations_per_frame",
+                   s.motion.maximum_triangulations_per_frame);
+    config.number("minimum_baseline_m",
+                  s.motion.triangulation_limits.minimum_baseline_m);
+    config.number("minimum_parallax_rad",
+                  s.motion.triangulation_limits.minimum_parallax_rad);
+    config.number("maximum_reprojection_error_px",
+                  s.motion.triangulation_limits.maximum_reprojection_error_px);
+    config.number("maximum_depth_m",
+                  s.motion.triangulation_limits.maximum_depth_m);
+    config.integer("pose_minimum_inliers", a.relative_pose.minimum_inliers);
+    config.integer("pose_maximum_iterations", a.relative_pose.maximum_iterations);
+    config.integer("pose_maximum_points", a.relative_pose.maximum_points);
+    config.number("pose_threshold_px", a.relative_pose.threshold_px);
+    config.number("pose_minimum_parallax_rad", a.relative_pose.minimum_parallax_rad);
+    config.number("pose_maximum_reprojection_error_px",
+                  a.relative_pose.maximum_reprojection_error_px);
+    config.number("pose_maximum_relative_depth", a.relative_pose.maximum_relative_depth);
+
+    const std::vector<std::string> known_keys = {
+        "batch_dimension", "canny_high", "canny_low", "comparison_features",
+        "corner_block_size", "corner_distance_px", "corner_quality",
+        "depth_gradient_scale", "depth_scale_m", "diffusion_conductance_m",
+        "diffusion_iterations", "diffusion_time_step", "enable_geometry", "features",
+        "flow_iterations", "flow_levels", "flow_poly_n", "flow_poly_sigma",
+        "flow_pyramid_scale", "flow_scale_px", "flow_window", "forward_backward",
+        "gaussian_kernel", "gaussian_sigma", "grid_height", "grid_resolution_m",
+        "grid_width", "harris_k", "harris_scale", "idw_enabled",
+        "idw_maximum_distance_m", "idw_maximum_neighbors", "idw_minimum_neighbors",
+        "idw_power", "idw_radius_m", "map_age_s", "map_radius_m",
+        "maximum_depth_m", "maximum_grid_cells", "maximum_map_points",
+        "maximum_reprojection_error_px", "maximum_tracks",
+        "maximum_triangulations_per_frame", "minimum_baseline_m",
+        "minimum_parallax_rad", "pose_interval", "pose_maximum_iterations",
+        "pose_maximum_points", "pose_maximum_relative_depth",
+        "pose_maximum_reprojection_error_px", "pose_minimum_inliers",
+        "pose_minimum_parallax_rad", "pose_threshold_px", "replenish_below",
+        "require_imu", "roughness_scale_m", "roughness_window",
+        "triangulation_interval", "voxel_size_m", "working_height", "working_width"
+    };
+    config.rejectUnknown(known_keys);
+    detail::validateAnalyticalSettings(s);
+    return s;
 }
 } // namespace metric_mapping
 namespace metric_mapping::detail {

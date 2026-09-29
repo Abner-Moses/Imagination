@@ -3,3 +3,9 @@ build/
 demo_output/
 tmp/
 .DS_Store
+__pycache__/
+*.py[cod]
+.pytest_cache/
+training/runs/
+training/results/
+*.onnx

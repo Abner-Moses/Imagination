@@ -57,6 +57,10 @@ Documentation lives in `docs/`, editable examples in `configs/`, and generated
 results in `output/`. These are ordinary supporting files, outside the code-file
 budget. There is no source generation or giant combined implementation file.
 
+Offline dataset preparation, PyTorch training, analytical-versus-RGB baseline
+evaluation, ablations, and ONNX export live separately in
+[training/](training/README.md). Python is not required by the onboard C++ runtime.
+
 ## Where to start as a contributor
 
 Read the [beginner architecture guide](docs/architecture.md), then follow

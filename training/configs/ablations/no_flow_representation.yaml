@@ -1,0 +1,10 @@
+# Example model-only experiment. Generate equivalent configurations with
+# `python -m training.ablate` so they retain the base experiment settings.
+model:
+  type: analytical
+  state_dim: 10
+  disabled_families: [flow]
+
+experiment:
+  ablation_mode: representation
+  claim: representation-only; does not measure C++ compute savings

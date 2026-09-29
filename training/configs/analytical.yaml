@@ -1,0 +1,45 @@
+model:
+  type: analytical
+  state_dim: 10
+  disabled_families: []
+
+htransformer:
+  stage3_channels: 384
+  stage4_channels: 768
+  stage3_heads: 6
+  stage4_heads: 12
+  stage3_depth: 1
+  stage4_depth: 1
+  mbconv_expansion: 2.0
+  mbconv_kernel: 3
+  se_ratio: 0.25
+  dropout: 0.1
+  stochastic_depth: 0.05
+
+training:
+  output: training/runs/analytical
+  epochs: 30
+  batch_size: 8
+  workers: 0
+  learning_rate: 0.0003
+  weight_decay: 0.0001
+  seed: 7
+  deterministic: true
+  device: auto
+  mixed_precision: true
+  gradient_clip: 1.0
+  early_stopping_patience: 8
+
+losses:
+  hazard_weight: 1.0
+  waypoint_weight: 1.0
+  positive_class_weight: 3.0
+  overlap: tversky
+  overlap_weight: 0.5
+  tversky_alpha: 0.3
+  tversky_beta: 0.7
+  yaw_weight: 1.0
+
+data:
+  manifest: dataset/manifest.jsonl
+  validate_files: true

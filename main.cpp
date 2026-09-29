@@ -473,112 +473,348 @@ int run(int argc, char** argv)
 #ifdef HAVE_VISUAL_FEATURES
 namespace pre_extract_command {
 using namespace metric_mapping;
-int run(int argc,char** argv)
+namespace {
+enum class InputMode { Still, Sequence, Video, Camera, Synthetic };
+
+struct Options {
+    std::filesystem::path input;
+    std::filesystem::path output;
+    std::filesystem::path config;
+    std::filesystem::path calibration;
+    std::filesystem::path imu_snapshot;
+    std::filesystem::path range_snapshot;
+    std::string selected_features;
+    std::string removed_features;
+    InputMode mode = InputMode::Still;
+    int frames = 100;
+    double fps = 10;
+    bool write_data = false;
+    bool write_debug = false;
+    bool disable_geometry = false;
+};
+
+constexpr const char* usage =
+    "Usage: pre_extract INPUT OUTPUT [--sequence|--video|--camera|--synthetic] "
+    "[--config YAML] [--calibration YAML] [--features names] [--without names] "
+    "[--no-geometry] [--frames N] [--fps N] [--data] [--debug] "
+    "[--imu FILE] [--ultrasonic FILE]";
+
+double parseFps(const std::string& text)
+{
+    std::size_t consumed = 0;
+    const double fps = std::stod(text, &consumed);
+    if(consumed != text.size() || !std::isfinite(fps) || fps <= 0)
+        throw std::runtime_error("Invalid FPS");
+    return fps;
+}
+
+Options parseOptions(int argc, char** argv)
+{
+    if(argc < 3) throw std::runtime_error(usage);
+    Options options;
+    options.input = argv[1];
+    options.output = argv[2];
+    int mode_count = 0;
+    for(int i = 3; i < argc; ++i) {
+        const std::string argument = argv[i];
+        const auto value = [&]() {
+            if(i + 1 >= argc) throw std::runtime_error("Missing value for " + argument);
+            return std::string(argv[++i]);
+        };
+        const auto mode = [&](InputMode selected) {
+            options.mode = selected;
+            ++mode_count;
+        };
+
+        if(argument == "--sequence") mode(InputMode::Sequence);
+        else if(argument == "--video") mode(InputMode::Video);
+        else if(argument == "--camera") mode(InputMode::Camera);
+        else if(argument == "--synthetic") mode(InputMode::Synthetic);
+        else if(argument == "--data") options.write_data = true;
+        else if(argument == "--debug") options.write_debug = true;
+        else if(argument == "--no-geometry") options.disable_geometry = true;
+        else if(argument == "--config") options.config = value();
+        else if(argument == "--calibration") options.calibration = value();
+        else if(argument == "--features") options.selected_features = value();
+        else if(argument == "--without") options.removed_features = value();
+        else if(argument == "--imu") options.imu_snapshot = value();
+        else if(argument == "--ultrasonic") options.range_snapshot = value();
+        else if(argument == "--frames")
+            options.frames = detail::parseInteger(value(), 1, 100000);
+        else if(argument == "--fps") options.fps = parseFps(value());
+        else throw std::runtime_error("Unknown pre_extract argument: " + argument);
+    }
+    if(mode_count > 1) throw std::runtime_error("Choose one input mode");
+    return options;
+}
+
+VisualFeatureSettings makeSettings(const Options& options)
+{
+    auto settings = options.config.empty() ?
+        analyticalFeatureSettings() : loadAnalyticalConfig(options.config);
+    if(!options.selected_features.empty())
+        settings.analytical.features = selectAnalyticFeatures(options.selected_features);
+    if(!options.removed_features.empty())
+        settings.analytical.features &= ~selectAnalyticFeatures(options.removed_features);
+    if(options.disable_geometry) settings.analytical.enable_geometry = false;
+    if(!options.imu_snapshot.empty()) settings.motion.require_imu = true;
+    return settings;
+}
+
+double sequenceNumber(const cv::FileNode& frame, const char* key)
+{
+    const auto value = frame[key];
+    if(!value.isReal() && !value.isInt())
+        throw std::runtime_error(std::string("Missing numeric sequence field: ") + key);
+    return double(value);
+}
+
+class ExtractionRun {
+public:
+    explicit ExtractionRun(const Options& options)
+        : options_(options), settings_(makeSettings(options)),
+          camera_(loadVisualCalibration(options.calibration, settings_.distortion)),
+          extractor_(settings_, prepareCamera()), directory_(options.output),
+          timing_(openTimingFile()) {}
+
+    int execute()
+    {
+        switch(options_.mode) {
+        case InputMode::Still: processStill(); break;
+        case InputMode::Sequence: processSequence(); break;
+        case InputMode::Video: processCapture(false); break;
+        case InputMode::Camera: processCapture(true); break;
+        case InputMode::Synthetic: processSynthetic(); break;
+        }
+        if(!last_) throw std::runtime_error("No input frames");
+        writeDebugOutputs();
+        detail::requireWritable(timing_, directory_ / "timings.csv");
+        writeReport();
+        return 0;
+    }
+
+private:
+    const Options& options_;
+    VisualFeatureSettings settings_;
+    std::optional<CameraIntrinsics> camera_;
+    VisualFeatureExtractor extractor_;
+    std::filesystem::path directory_;
+    std::ofstream timing_;
+    std::vector<double> times_;
+    const VisualFeatureFrame* last_ = nullptr;
+    int frame_count_ = 0;
+
+    std::optional<CameraIntrinsics> prepareCamera()
+    {
+        const bool has_snapshots = !options_.imu_snapshot.empty() ||
+                                   !options_.range_snapshot.empty();
+        if(has_snapshots && options_.mode != InputMode::Camera)
+            throw std::runtime_error(
+                "Sensor snapshots require live camera timestamps; "
+                "use per-frame readings in a sequence manifest");
+        if(options_.mode == InputMode::Synthetic) {
+            if(camera_) throw std::runtime_error("Synthetic input supplies its own calibration");
+            camera_ = CameraIntrinsics{256, 256, 220, 220, 127.5, 127.5};
+        }
+        cv::setNumThreads(1);
+        return camera_;
+    }
+
+    std::ofstream openTimingFile()
+    {
+        std::filesystem::create_directories(directory_);
+        std::ofstream file(directory_ / "timings.csv");
+        if(!file) throw std::runtime_error("Cannot open timing output");
+        file << "frame,timestamp_s,total_ms,stage,ran,stage_ms,tracks,inliers,"
+                "map_points,coverage_percent,scale_valid,geometry_valid,"
+                "dense_flow_valid,payload_bytes\n";
+        return file;
+    }
+
+    void consume(const cv::Mat& image, double timestamp,
+                 std::optional<AltitudeSample> altitude,
+                 std::optional<ImuSample> imu)
+    {
+        const auto& result = extractor_.extract(image, timestamp, altitude, imu);
+        last_ = &result;
+        times_.push_back(result.total_ms);
+        writeTimings(result, timestamp);
+        const auto stem = "frame_" + std::to_string(frame_count_);
+        if(options_.write_data)
+            writeVisualFeatures(directory_ / (stem + ".yml.gz"), result, settings_);
+        if(options_.write_debug && frame_count_ % 10 == 0)
+            detail::writeImage(directory_ / (stem + ".jpg"),
+                               renderAnalyticalFeatures(result));
+        ++frame_count_;
+    }
+
+    void writeTimings(const VisualFeatureFrame& result, double timestamp)
+    {
+        const auto& diagnostics = result.analytical;
+        for(const auto& stage : result.analytical_stages) {
+            timing_ << frame_count_ << ',' << std::setprecision(12) << timestamp
+                << ',' << result.total_ms << ',' << stage.name << ',' << stage.ran
+                << ',' << stage.elapsed_ms << ',' << diagnostics.num_sparse_tracks
+                << ',' << diagnostics.num_pose_inliers
+                << ',' << diagnostics.local_map_point_count
+                << ',' << diagnostics.geometry_coverage_percent
+                << ',' << diagnostics.scale_valid << ',' << diagnostics.geometry_valid
+                << ',' << diagnostics.dense_flow_valid << ',' << diagnostics.payload_bytes
+                << '\n';
+        }
+    }
+
+    void processStill()
+    {
+        consume(cv::imread(options_.input.string()), 0, std::nullopt, std::nullopt);
+    }
+
+    void processSequence()
+    {
+        cv::FileStorage manifest(options_.input.string(), cv::FileStorage::READ);
+        if(!manifest.isOpened() || !manifest["frames"].isSeq())
+            throw std::runtime_error("Sequence requires YAML frames list");
+        const auto parent = options_.input.parent_path();
+        for(const auto& frame : manifest["frames"]) {
+            const double timestamp = sequenceNumber(frame, "timestamp_s");
+            std::optional<AltitudeSample> altitude;
+            std::optional<ImuSample> imu;
+            if(!frame["altitude_m"].empty()) {
+                altitude = AltitudeSample{
+                    sequenceNumber(frame, "altitude_m"),
+                    sequenceNumber(frame, "range_timestamp_s")};
+            }
+            if(!frame["imu"].empty()) {
+                std::vector<double> angles;
+                frame["imu"] >> angles;
+                if(angles.size() != 3)
+                    throw std::runtime_error("imu must contain roll,pitch,yaw");
+                imu = ImuSample{angles[0], angles[1], angles[2],
+                                sequenceNumber(frame, "imu_timestamp_s")};
+            }
+            const auto image = cv::imread((parent / std::string(frame["image"])).string());
+            consume(image, timestamp, altitude, imu);
+            if(frame_count_ >= options_.frames) break;
+        }
+    }
+
+    void processCapture(bool live_camera)
+    {
+#ifdef HAVE_MOTION_CAMERA
+        cv::VideoCapture capture;
+        if(live_camera)
+            capture.open(detail::parseInteger(options_.input.string(), 0));
+        else
+            capture.open(options_.input.string());
+        if(!capture.isOpened()) throw std::runtime_error("Cannot open camera/video");
+
+        double fps = options_.fps;
+        if(live_camera) {
+            capture.set(cv::CAP_PROP_FRAME_WIDTH, camera_ ? camera_->width : 256);
+            capture.set(cv::CAP_PROP_FRAME_HEIGHT, camera_ ? camera_->height : 256);
+            capture.set(cv::CAP_PROP_FPS, fps);
+        } else {
+            const double recorded_fps = capture.get(cv::CAP_PROP_FPS);
+            if(std::isfinite(recorded_fps) && recorded_fps > 0) fps = recorded_fps;
+        }
+
+        cv::Mat image;
+        while(frame_count_ < options_.frames && capture.read(image)) {
+            const double timestamp = live_camera ?
+                std::chrono::duration<double>(
+                    std::chrono::steady_clock::now().time_since_epoch()).count() :
+                frame_count_ / fps;
+            consume(image, timestamp,
+                    detail::readAltitudeSnapshot(options_.range_snapshot),
+                    detail::readImuSnapshot(options_.imu_snapshot));
+        }
+#else
+        (void)live_camera;
+        throw std::runtime_error("Video/camera input requires BUILD_MOTION_CAMERA=ON");
+#endif
+    }
+
+    void processSynthetic()
+    {
+#ifdef HAVE_MOTION
+        const auto texture = demo::motionTexture({256, 256});
+        cv::Mat gray, bgr;
+        for(int i = 0; i < options_.frames; ++i) {
+            const double timestamp = i / options_.fps;
+            demo::warpMotion(texture, gray, *camera_, 0.7 * i, 0.12 * i);
+            cv::cvtColor(gray, bgr, cv::COLOR_GRAY2BGR);
+            consume(bgr, timestamp, AltitudeSample{2, timestamp},
+                    ImuSample{0, 0, 0, timestamp});
+        }
+#else
+        throw std::runtime_error("Synthetic motion input requires BUILD_MOTION=ON");
+#endif
+    }
+
+    void writeDebugOutputs()
+    {
+        if(!options_.write_debug) return;
+        detail::writeImage(directory_ / "analytical_features.jpg",
+                           renderAnalyticalFeatures(*last_));
+        if(!last_->local_map.empty()) {
+            std::vector<ColoredPoint> cloud;
+            cloud.reserve(last_->local_map.size());
+            for(const auto& point : last_->local_map) cloud.push_back(point.point);
+            writePly(directory_ / "local_map.ply", cloud,
+                     "metres in current local nadir segment; no global registration");
+        }
+        if(last_->terrain.width) {
+            writeDemCsv(directory_ / "dem.csv", last_->terrain);
+            writeTerrainImages(directory_, last_->terrain);
+        }
+    }
+
+    const char* inputDescription() const
+    {
+        switch(options_.mode) {
+        case InputMode::Synthetic: return "synthetic known planar motion";
+        case InputMode::Sequence: return "user-supplied timestamped sequence";
+        case InputMode::Camera: return "live camera delivery timestamps";
+        case InputMode::Video: return "video frame-index/FPS timestamps";
+        case InputMode::Still: return "single still; no temporal information";
+        }
+        return "unknown";
+    }
+
+    void writeReport()
+    {
+        const auto summary = detail::summarizeTimes(times_);
+        std::ofstream report(directory_ / "run.txt");
+        report << "Input: " << inputDescription()
+            << "\nFrames: " << frame_count_
+            << "\nTensor channels: " << last_->feature_tensor.channel_names.size()
+            << "\nMean/median/p95/worst ms (including initialization; "
+               "excludes capture/export): "
+            << summary.mean << ' ' << summary.median << ' '
+            << summary.p95 << ' ' << summary.worst
+            << "\nGeometry: " << last_->analytical.geometry_status
+            << "\nMap points: " << last_->analytical.local_map_point_count
+            << "\nGeometry coverage percent: "
+            << last_->analytical.geometry_coverage_percent
+            << "\nNo hardware energy measurement.\n";
+        detail::requireWritable(report, directory_ / "run.txt");
+        std::cout << "Extracted " << frame_count_ << " frame(s), "
+            << last_->feature_tensor.channel_names.size()
+            << " channels. Mean/p95: " << summary.mean << '/' << summary.p95
+            << " ms. Geometry: " << last_->analytical.geometry_status << '\n';
+    }
+};
+} // namespace
+
+int run(int argc, char** argv)
 {
     try {
-        if(argc<3)throw std::runtime_error("Usage: pre_extract INPUT OUTPUT [--sequence|--video|--camera|--synthetic] [--config YAML] [--calibration YAML] [--features names] [--without names] [--no-geometry] [--frames N] [--fps N] [--data] [--debug] [--imu FILE] [--ultrasonic FILE]");
-        std::filesystem::path config,calibration,imu_path,range_path;
-        std::string selected,removed;bool sequence=false,video=false,camera=false,synthetic=false,data=false,debug=false,no_geometry=false;
-        int frames=100;double fps=10;
-        for(int i=3;i<argc;++i){
-            const std::string arg=argv[i];
-            const auto value=[&](){if(i+1>=argc)throw std::runtime_error("Missing value for "+arg);return std::string(argv[++i]);};
-            if(arg=="--sequence")sequence=true;else if(arg=="--video")video=true;else if(arg=="--camera")camera=true;
-            else if(arg=="--synthetic")synthetic=true;else if(arg=="--data")data=true;else if(arg=="--debug")debug=true;
-            else if(arg=="--no-geometry")no_geometry=true;
-            else if(arg=="--config")config=value();else if(arg=="--calibration")calibration=value();
-            else if(arg=="--features")selected=value();else if(arg=="--without")removed=value();
-            else if(arg=="--imu")imu_path=value();else if(arg=="--ultrasonic")range_path=value();
-            else if(arg=="--frames")frames=detail::parseInteger(value(),1,100000);
-            else if(arg=="--fps") {const auto text=value();std::size_t used;fps=std::stod(text,&used);if(used!=text.size()||!std::isfinite(fps)||fps<=0)throw std::runtime_error("Invalid FPS");}
-            else throw std::runtime_error("Unknown pre_extract argument: "+arg);
-        }
-        if(int(sequence)+int(video)+int(camera)+int(synthetic)>1)throw std::runtime_error("Choose one input mode");
-        auto settings=config.empty()?analyticalFeatureSettings():loadAnalyticalConfig(config);
-        if(!selected.empty())settings.analytical.features=selectAnalyticFeatures(selected);
-        if(!removed.empty())settings.analytical.features &= ~selectAnalyticFeatures(removed);
-        if(no_geometry)settings.analytical.enable_geometry=false;
-        auto k=loadVisualCalibration(calibration,settings.distortion);
-        if(!imu_path.empty())settings.motion.require_imu=true;
-        if((!imu_path.empty()||!range_path.empty())&&!camera)throw std::runtime_error("Sensor snapshots require live camera timestamps; use per-frame readings in a sequence manifest");
-        if(synthetic){if(k)throw std::runtime_error("Synthetic input supplies its own calibration");k=CameraIntrinsics{256,256,220,220,127.5,127.5};}
-        cv::setNumThreads(1);
-        VisualFeatureExtractor extractor(settings,k);
-        const std::filesystem::path directory(argv[2]);std::filesystem::create_directories(directory);
-        std::ofstream timing(directory/"timings.csv");if(!timing)throw std::runtime_error("Cannot open timing output");
-        timing << "frame,timestamp_s,total_ms,stage,ran,stage_ms,tracks,inliers,map_points,coverage_percent,scale_valid,geometry_valid,dense_flow_valid,payload_bytes\n";
-        std::vector<double> times;const VisualFeatureFrame* last=nullptr;int count=0;
-        const auto consume=[&](const cv::Mat& image,double timestamp,std::optional<AltitudeSample> altitude,std::optional<ImuSample> imu){
-            const auto& result=extractor.extract(image,timestamp,altitude,imu);last=&result;times.push_back(result.total_ms);
-            const auto& d=result.analytical;
-            for(const auto& t:result.analytical_stages)timing << count << ',' << std::setprecision(12) << timestamp << ',' << result.total_ms << ',' << t.name << ',' << t.ran << ',' << t.elapsed_ms << ','
-                << d.num_sparse_tracks << ',' << d.num_pose_inliers << ',' << d.local_map_point_count << ',' << d.geometry_coverage_percent << ',' << d.scale_valid << ',' << d.geometry_valid << ',' << d.dense_flow_valid << ',' << d.payload_bytes << '\n';
-            if(data)writeVisualFeatures(directory/("frame_"+std::to_string(count)+".yml.gz"),result,settings);
-            if(debug&&count%10==0)detail::writeImage(directory/("frame_"+std::to_string(count)+".jpg"),renderAnalyticalFeatures(result));
-            ++count;
-        };
-        if(sequence){
-            cv::FileStorage manifest(argv[1],cv::FileStorage::READ);if(!manifest.isOpened()||!manifest["frames"].isSeq())throw std::runtime_error("Sequence requires YAML frames list");
-            const auto parent=std::filesystem::path(argv[1]).parent_path();
-            for(const auto& node:manifest["frames"]){
-                const auto number=[&](const char* key){auto n=node[key];if(!n.isReal()&&!n.isInt())throw std::runtime_error(std::string("Missing numeric sequence field: ")+key);return double(n);};
-                const double timestamp=number("timestamp_s");std::optional<AltitudeSample> altitude;std::optional<ImuSample> imu;
-                if(!node["altitude_m"].empty())altitude=AltitudeSample{number("altitude_m"),number("range_timestamp_s")};
-                if(!node["imu"].empty()){
-                    std::vector<double> angles;node["imu"]>>angles;if(angles.size()!=3)throw std::runtime_error("imu must contain roll,pitch,yaw");
-                    imu=ImuSample{angles[0],angles[1],angles[2],number("imu_timestamp_s")};
-                }
-                consume(cv::imread((parent/std::string(node["image"])).string()),timestamp,altitude,imu);
-                if(count>=frames)break;
-            }
-        }else if(video||camera){
-#ifdef HAVE_MOTION_CAMERA
-            cv::VideoCapture capture;
-            if(camera)capture.open(detail::parseInteger(argv[1],0));else capture.open(argv[1]);
-            if(!capture.isOpened())throw std::runtime_error("Cannot open camera/video");
-            if(camera){capture.set(cv::CAP_PROP_FRAME_WIDTH,k?k->width:256);capture.set(cv::CAP_PROP_FRAME_HEIGHT,k?k->height:256);capture.set(cv::CAP_PROP_FPS,fps);}
-            else {const double recorded=capture.get(cv::CAP_PROP_FPS);if(std::isfinite(recorded)&&recorded>0)fps=recorded;}
-            cv::Mat image;
-            while(count<frames&&capture.read(image)){
-                const double timestamp=camera?std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count():count/fps;
-                consume(image,timestamp,detail::readAltitudeSnapshot(range_path),detail::readImuSnapshot(imu_path));
-            }
-#else
-            throw std::runtime_error("Video/camera input requires BUILD_MOTION_CAMERA=ON");
-#endif
-        }else if(synthetic){
-#ifdef HAVE_MOTION
-            const auto texture=demo::motionTexture({256,256});cv::Mat gray,bgr;
-            for(int i=0;i<frames;++i){
-                demo::warpMotion(texture,gray,*k,0.7*i,0.12*i);
-                cv::cvtColor(gray,bgr,cv::COLOR_GRAY2BGR);
-                consume(bgr,i/fps,AltitudeSample{2,i/fps},ImuSample{0,0,0,i/fps});
-            }
-#else
-            throw std::runtime_error("Synthetic motion input requires BUILD_MOTION=ON");
-#endif
-        }else consume(cv::imread(argv[1]),0,std::nullopt,std::nullopt);
-        if(!last)throw std::runtime_error("No input frames");
-        if(debug){
-            detail::writeImage(directory/"analytical_features.jpg",renderAnalyticalFeatures(*last));
-            if(!last->local_map.empty()){
-                std::vector<ColoredPoint> cloud;for(const auto& p:last->local_map)cloud.push_back(p.point);
-                writePly(directory/"local_map.ply",cloud,"metres in current local nadir segment; no global registration");
-            }
-            if(last->terrain.width){writeDemCsv(directory/"dem.csv",last->terrain);writeTerrainImages(directory,last->terrain);}
-        }
-        detail::requireWritable(timing,directory/"timings.csv");
-        const auto summary=detail::summarizeTimes(times);
-        std::ofstream report(directory/"run.txt");
-        report << "Input: " << (synthetic?"synthetic known planar motion":sequence?"user-supplied timestamped sequence":camera?"live camera delivery timestamps":video?"video frame-index/FPS timestamps":"single still; no temporal information")
-            << "\nFrames: " << count << "\nTensor channels: " << last->feature_tensor.channel_names.size()
-            << "\nMean/median/p95/worst ms (including initialization; excludes capture/export): " << summary.mean << ' ' << summary.median << ' ' << summary.p95 << ' ' << summary.worst
-            << "\nGeometry: " << last->analytical.geometry_status << "\nMap points: " << last->analytical.local_map_point_count
-            << "\nGeometry coverage percent: " << last->analytical.geometry_coverage_percent << "\nNo hardware energy measurement.\n";
-        detail::requireWritable(report,directory/"run.txt");
-        std::cout << "Extracted " << count << " frame(s), " << last->feature_tensor.channel_names.size() << " channels. Mean/p95: " << summary.mean << '/' << summary.p95 << " ms. Geometry: " << last->analytical.geometry_status << '\n';
-        return 0;
-    }catch(const std::exception& e){std::cerr << e.what() << '\n';return 1;}
+        const auto options = parseOptions(argc, argv);
+        return ExtractionRun(options).execute();
+    } catch(const std::exception& error) {
+        std::cerr << error.what() << '\n';
+        return 1;
+    }
 }
 } // namespace pre_extract_command
 #endif
