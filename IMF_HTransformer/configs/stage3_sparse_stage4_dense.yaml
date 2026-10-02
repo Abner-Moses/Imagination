@@ -1,0 +1,13 @@
+extends:
+  - ../../common/configs/model_common.yaml
+  - ../config.yaml
+model:
+  attention:
+    mode: sparse
+    stage3_mode: sparse
+    stage4_mode: dense
+    selection: metric
+    position_bias: metric
+    neighbors: 32
+training:
+  output: artifacts/checkpoints/imf_ablation/stage3_sparse_stage4_dense/seed_7

@@ -1,0 +1,38 @@
+name: full
+models: [cnn, cnn_vit, cnn_htransformer, imf_htransformer]
+seeds: [7, 17, 29]
+epochs: 80
+profile: research
+manifest: data/manifests/all.jsonl
+evaluate_test: false
+ablations:
+  - name: imf_spatial_isolation
+    base: imf_htransformer
+    seeds: [7, 17, 29]
+    disabled_families: [flow, geometry]
+  - name: imf_no_flow
+    base: imf_htransformer
+    seeds: [7, 17, 29]
+    disabled_families: [flow]
+  - name: imf_no_geometry
+    base: imf_htransformer
+    seeds: [7, 17, 29]
+    disabled_families: [geometry]
+  - name: imf_no_hog
+    base: imf_htransformer
+    seeds: [7, 17, 29]
+    disabled_families: [hog]
+  - name: imf_no_state_conditioning
+    base: imf_htransformer
+    seeds: [7, 17, 29]
+    disabled_families: []
+    state_conditioning: false
+  - name: imf_no_predicted_map_context
+    base: imf_htransformer
+    seeds: [7, 17, 29]
+    disabled_families: []
+    map_context: false
+sensitivity:
+  enabled: false
+  base: imf_htransformer
+  depths: [5, 2]

@@ -1,6 +1,0 @@
-data:
-  raw_root: dataset/raw
-  output_root: dataset/prepared
-  extractor: build/imagination
-  extractor_config: configs/pre_extraction.yaml
-  allow_feature_ablation: false

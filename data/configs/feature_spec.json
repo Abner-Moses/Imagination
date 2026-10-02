@@ -1,0 +1,384 @@
+{
+  "version": "imagination-feature-normalization-v1",
+  "shape": [
+    28,
+    32,
+    32
+  ],
+  "storage": "channel-major float32; validity is same-shape binary",
+  "source": "IMF_HTransformer/imf/cpp/vision.cpp::normalizeChannel",
+  "fusion_families": {
+    "appearance": [
+      "Y",
+      "Cb",
+      "Cr",
+      "Gx",
+      "Gy",
+      "GradientMagnitude",
+      "HOG_0",
+      "HOG_1",
+      "HOG_2",
+      "HOG_3",
+      "HOG_4",
+      "HOG_5",
+      "HOG_6",
+      "HOG_7",
+      "HOG_8",
+      "HarrisResponse",
+      "CannyEdge",
+      "ContourMap",
+      "ChromaGradientCb",
+      "ChromaGradientCr"
+    ],
+    "motion": [
+      "OpticalFlowU",
+      "OpticalFlowV"
+    ],
+    "geometry": [
+      "Depth",
+      "DepthGradientX",
+      "DepthGradientY",
+      "Slope",
+      "Roughness",
+      "GeometryConfidence"
+    ]
+  },
+  "channels": [
+    {
+      "index": 0,
+      "name": "Y",
+      "family": "appearance",
+      "units": "unitless_luma",
+      "expected_range": [
+        0.0,
+        1.0
+      ],
+      "normalization": "natural_[0,1]",
+      "validity_semantics": "all pixels"
+    },
+    {
+      "index": 1,
+      "name": "Cb",
+      "family": "appearance",
+      "units": "unitless_chroma",
+      "expected_range": [
+        0.0,
+        1.0
+      ],
+      "normalization": "natural_[0,1]",
+      "validity_semantics": "all pixels"
+    },
+    {
+      "index": 2,
+      "name": "Cr",
+      "family": "appearance",
+      "units": "unitless_chroma",
+      "expected_range": [
+        0.0,
+        1.0
+      ],
+      "normalization": "natural_[0,1]",
+      "validity_semantics": "all pixels"
+    },
+    {
+      "index": 3,
+      "name": "Gx",
+      "family": "appearance",
+      "units": "normalized_intensity_per_working_pixel",
+      "expected_range": [
+        -1.0,
+        1.0
+      ],
+      "normalization": "fixed_2x_sobel_then_clip",
+      "validity_semantics": "all pixels"
+    },
+    {
+      "index": 4,
+      "name": "Gy",
+      "family": "appearance",
+      "units": "normalized_intensity_per_working_pixel",
+      "expected_range": [
+        -1.0,
+        1.0
+      ],
+      "normalization": "fixed_2x_sobel_then_clip",
+      "validity_semantics": "all pixels"
+    },
+    {
+      "index": 5,
+      "name": "GradientMagnitude",
+      "family": "appearance",
+      "units": "normalized_gradient_magnitude",
+      "expected_range": [
+        0.0,
+        1.0
+      ],
+      "normalization": "fixed_sqrt2_scale_then_clip",
+      "validity_semantics": "all pixels"
+    },
+    {
+      "index": 6,
+      "name": "HOG_0",
+      "family": "appearance",
+      "units": "unitless_orientation_energy",
+      "expected_range": [
+        0.0,
+        1.0
+      ],
+      "normalization": "per_cell_l2_normalized_histogram",
+      "validity_semantics": "all pixels"
+    },
+    {
+      "index": 7,
+      "name": "HOG_1",
+      "family": "appearance",
+      "units": "unitless_orientation_energy",
+      "expected_range": [
+        0.0,
+        1.0
+      ],
+      "normalization": "per_cell_l2_normalized_histogram",
+      "validity_semantics": "all pixels"
+    },
+    {
+      "index": 8,
+      "name": "HOG_2",
+      "family": "appearance",
+      "units": "unitless_orientation_energy",
+      "expected_range": [
+        0.0,
+        1.0
+      ],
+      "normalization": "per_cell_l2_normalized_histogram",
+      "validity_semantics": "all pixels"
+    },
+    {
+      "index": 9,
+      "name": "HOG_3",
+      "family": "appearance",
+      "units": "unitless_orientation_energy",
+      "expected_range": [
+        0.0,
+        1.0
+      ],
+      "normalization": "per_cell_l2_normalized_histogram",
+      "validity_semantics": "all pixels"
+    },
+    {
+      "index": 10,
+      "name": "HOG_4",
+      "family": "appearance",
+      "units": "unitless_orientation_energy",
+      "expected_range": [
+        0.0,
+        1.0
+      ],
+      "normalization": "per_cell_l2_normalized_histogram",
+      "validity_semantics": "all pixels"
+    },
+    {
+      "index": 11,
+      "name": "HOG_5",
+      "family": "appearance",
+      "units": "unitless_orientation_energy",
+      "expected_range": [
+        0.0,
+        1.0
+      ],
+      "normalization": "per_cell_l2_normalized_histogram",
+      "validity_semantics": "all pixels"
+    },
+    {
+      "index": 12,
+      "name": "HOG_6",
+      "family": "appearance",
+      "units": "unitless_orientation_energy",
+      "expected_range": [
+        0.0,
+        1.0
+      ],
+      "normalization": "per_cell_l2_normalized_histogram",
+      "validity_semantics": "all pixels"
+    },
+    {
+      "index": 13,
+      "name": "HOG_7",
+      "family": "appearance",
+      "units": "unitless_orientation_energy",
+      "expected_range": [
+        0.0,
+        1.0
+      ],
+      "normalization": "per_cell_l2_normalized_histogram",
+      "validity_semantics": "all pixels"
+    },
+    {
+      "index": 14,
+      "name": "HOG_8",
+      "family": "appearance",
+      "units": "unitless_orientation_energy",
+      "expected_range": [
+        0.0,
+        1.0
+      ],
+      "normalization": "per_cell_l2_normalized_histogram",
+      "validity_semantics": "all pixels"
+    },
+    {
+      "index": 15,
+      "name": "HarrisResponse",
+      "family": "appearance",
+      "units": "fixed_scaled_signed_sqrt_response",
+      "expected_range": [
+        -1.0,
+        1.0
+      ],
+      "normalization": "configured_harris_scale_then_clip",
+      "validity_semantics": "all pixels"
+    },
+    {
+      "index": 16,
+      "name": "CannyEdge",
+      "family": "appearance",
+      "units": "binary",
+      "expected_range": [
+        0.0,
+        1.0
+      ],
+      "normalization": "binary_0_or_1",
+      "validity_semantics": "all pixels; non-edge is measured zero"
+    },
+    {
+      "index": 17,
+      "name": "ContourMap",
+      "family": "appearance",
+      "units": "binary",
+      "expected_range": [
+        0.0,
+        1.0
+      ],
+      "normalization": "binary_0_or_1",
+      "validity_semantics": "all pixels; non-contour is measured zero"
+    },
+    {
+      "index": 18,
+      "name": "ChromaGradientCb",
+      "family": "appearance",
+      "units": "normalized_chroma_gradient",
+      "expected_range": [
+        0.0,
+        1.0
+      ],
+      "normalization": "fixed_sqrt2_scale_then_clip",
+      "validity_semantics": "all pixels"
+    },
+    {
+      "index": 19,
+      "name": "ChromaGradientCr",
+      "family": "appearance",
+      "units": "normalized_chroma_gradient",
+      "expected_range": [
+        0.0,
+        1.0
+      ],
+      "normalization": "fixed_sqrt2_scale_then_clip",
+      "validity_semantics": "all pixels"
+    },
+    {
+      "index": 20,
+      "name": "OpticalFlowU",
+      "family": "motion",
+      "units": "working_pixels_per_frame",
+      "expected_range": [
+        -1.0,
+        1.0
+      ],
+      "normalization": "divide_by_flow_scale_px_then_clip",
+      "validity_semantics": "valid only where dense-flow support exists"
+    },
+    {
+      "index": 21,
+      "name": "OpticalFlowV",
+      "family": "motion",
+      "units": "working_pixels_per_frame",
+      "expected_range": [
+        -1.0,
+        1.0
+      ],
+      "normalization": "divide_by_flow_scale_px_then_clip",
+      "validity_semantics": "valid only where dense-flow support exists"
+    },
+    {
+      "index": 22,
+      "name": "Depth",
+      "family": "geometry",
+      "units": "metres",
+      "expected_range": [
+        0.0,
+        1.0
+      ],
+      "normalization": "divide_by_depth_scale_m_then_clip",
+      "validity_semantics": "valid reconstructed current-view geometry only"
+    },
+    {
+      "index": 23,
+      "name": "DepthGradientX",
+      "family": "geometry",
+      "units": "dimensionless_relative_depth_gradient",
+      "expected_range": [
+        -1.0,
+        1.0
+      ],
+      "normalization": "sobel_depth_times_focal_over_depth_then_fixed_scale_and_clip",
+      "validity_semantics": "valid 3x3 reconstructed current-view support only"
+    },
+    {
+      "index": 24,
+      "name": "DepthGradientY",
+      "family": "geometry",
+      "units": "dimensionless_relative_depth_gradient",
+      "expected_range": [
+        -1.0,
+        1.0
+      ],
+      "normalization": "sobel_depth_times_focal_over_depth_then_fixed_scale_and_clip",
+      "validity_semantics": "valid 3x3 reconstructed current-view support only"
+    },
+    {
+      "index": 25,
+      "name": "Slope",
+      "family": "geometry",
+      "units": "radians",
+      "expected_range": [
+        0.0,
+        1.0
+      ],
+      "normalization": "multiply_by_2_over_pi_then_clip",
+      "validity_semantics": "valid reconstructed surface only"
+    },
+    {
+      "index": 26,
+      "name": "Roughness",
+      "family": "geometry",
+      "units": "metres",
+      "expected_range": [
+        0.0,
+        1.0
+      ],
+      "normalization": "divide_by_roughness_scale_m_then_clip",
+      "validity_semantics": "valid reconstructed surface only"
+    },
+    {
+      "index": 27,
+      "name": "GeometryConfidence",
+      "family": "geometry",
+      "units": "support_score_not_calibrated_probability",
+      "expected_range": [
+        0.0,
+        1.0
+      ],
+      "normalization": "natural_bounded_score",
+      "validity_semantics": "zero is valid only when extraction completed and found no support"
+    }
+  ]
+}

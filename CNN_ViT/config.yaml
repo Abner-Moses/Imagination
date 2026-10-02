@@ -1,0 +1,7 @@
+model:
+  family: cnn_vit
+  profile: research
+  state_conditioning: true
+training:
+  seed: 7
+  output: artifacts/checkpoints/cnn_vit/seed_7

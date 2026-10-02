@@ -1,0 +1,23 @@
+extends:
+  - ../../common/configs/model_common.yaml
+  - ../config.yaml
+model:
+  attention:
+    mode: sparse
+    stage3_mode: sparse
+    stage4_mode: dense
+    stage3_sparse_neighbors: 32
+    stage3_sparse_selection: metric
+    stage3_use_map_context: false
+    stage4_use_map_context: true
+    stage3_active_query_fraction: 0.5
+    stage4_active_query_fraction: 0.5
+    stage3_active_query_coverage_bins: [4, 4]
+    stage4_active_query_coverage_bins: [4, 4]
+    active_query_weights:
+      structure: 1.0
+      edge: 1.0
+      geometry_uncertainty: 0.5
+      motion_discontinuity: 0.5
+training:
+  output: artifacts/checkpoints/imf_ablation/active_query_experimental/seed_7

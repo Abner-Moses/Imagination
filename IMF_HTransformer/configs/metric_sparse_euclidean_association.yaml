@@ -1,0 +1,12 @@
+extends:
+  - ../../common/configs/model_common.yaml
+  - ../config.yaml
+model:
+  attention:
+    mode: sparse
+    position_bias: metric
+    neighbors: 32
+mapping:
+  association_mode: euclidean
+training:
+  output: artifacts/checkpoints/imf_ablation/metric_sparse_euclidean_association/seed_7

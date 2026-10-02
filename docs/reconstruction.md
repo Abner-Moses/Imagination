@@ -44,7 +44,7 @@ calibration and baseline.
 `baseline_m` is the physical distance between the two camera centers. It is
 what makes the cloud metric. The software does not invent this value.
 
-The current `00001.png` and `00002.png` files are 512 x 512, while the earlier
+The current `data/raw/assets/sample_01.png` and `data/raw/assets/sample_02.png` files are 512 x 512, while the earlier
 principal point `(640, 360)` belongs to a larger image. These images do not come with
 matching calibration or a measured baseline. Use them for the synthetic demo;
 do not infer metric terrain from guessed camera values.
@@ -53,11 +53,11 @@ do not infer metric terrain from guessed camera values.
 
 Both real reconstruction paths accept a synchronized reading from a sensor
 pointing vertically downward in the world frame (`-Z`). For stereo, edit
-[`configs/ultrasonic.yaml`](../configs/ultrasonic.yaml) with the measured distance
+[`data/configs/ultrasonic.yaml`](../data/configs/ultrasonic.yaml) with the measured distance
 in metres, the allowed absolute error, and the sensor's offset from camera 1:
 
 ```sh
-./build/two_view image1.png image2.png fx fy cx cy baseline_m --ultrasonic configs/ultrasonic.yaml
+./artifacts/build/two_view image1.png image2.png fx fy cx cy baseline_m --ultrasonic data/configs/ultrasonic.yaml
 ```
 
 For RGB-D, put the same `ultrasonic` block inside the reconstruction YAML and
@@ -126,7 +126,7 @@ the terrain grid's X/Y origin.
 ## Run
 
 ```bash
-./build/two_view image1.png image2.png fx fy cx cy baseline_m
+./artifacts/build/two_view image1.png image2.png fx fy cx cy baseline_m
 ```
 
 Every camera value must be numeric and must belong to the saved image size.
@@ -139,9 +139,9 @@ When only uncalibrated images are available, use the explicitly synthetic mode
 to test PLY/DEM/orthomosaic/IDW output and visualization:
 
 ```bash
-./build/two_view --demo \
-  00001.png \
-  00002.png
+./artifacts/build/two_view --demo \
+  data/raw/assets/sample_01.png \
+  data/raw/assets/sample_02.png
 ```
 
 This mode aligns the two images for color, then creates a deterministic
@@ -240,7 +240,7 @@ open -a MeshLab pointcloud.ply
 
 The metric RGB-D implementation remains available as
 `metric_mapper`. It accepts registered metric depth and supplied poses through
-`configs/reconstruction.yaml`; it is independent of the two-image stereo
+`data/configs/reconstruction.yaml`; it is independent of the two-image stereo
 executable.
 
 ## Analytical pre-extraction connection

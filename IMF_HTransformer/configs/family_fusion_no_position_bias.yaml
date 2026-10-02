@@ -1,0 +1,10 @@
+extends:
+  - ../../common/configs/model_common.yaml
+  - ../config.yaml
+model:
+  fusion: family
+  attention:
+    mode: dense
+    position_bias: none
+training:
+  output: artifacts/checkpoints/imf_ablation/family_fusion_no_position_bias/seed_7

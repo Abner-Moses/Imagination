@@ -1,0 +1,5 @@
+# Export and detailed memory-profiling tools.
+onnx>=1.15
+onnxscript>=0.2
+onnxruntime>=1.18
+psutil>=5.9

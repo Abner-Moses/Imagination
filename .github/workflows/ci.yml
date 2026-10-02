@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  python:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install lightweight test dependencies
+        run: python -m pip install torch numpy opencv-python-headless Pillow PyYAML
+      - name: Validate active model configuration
+        run: python -c "from pathlib import Path; import yaml; files=[Path('common/configs/model_common.yaml'),Path('common/configs/suite_smoke.yaml'),Path('common/configs/suite_primary.yaml'),Path('common/configs/suite_full.yaml'),Path('CNN/config.yaml'),Path('CNN_ViT/config.yaml'),Path('CNN_HTransformer/config.yaml'),Path('IMF_HTransformer/config.yaml')]; [yaml.safe_load(path.read_text()) for path in files]; print('active YAML configurations: PASS')"
+      - name: Run Python tests
+        run: python -m unittest discover -s tests/python -v
+
+  cpp-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install CMake and OpenCV
+        run: sudo apt-get update && sudo apt-get install -y cmake g++ libopencv-dev
+      - name: Configure
+        run: cmake --preset default
+      - name: Build
+        run: cmake --build --preset default --parallel 2
+      - name: CTest
+        run: ctest --preset default

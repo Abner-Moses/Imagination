@@ -1,0 +1,35 @@
+{
+  "calibration": {
+    "camera_coordinates": "OpenCV x right, y down, z forward after exporter conversion",
+    "cx": 319.5,
+    "cy": 239.5,
+    "distortion": "none (ideal Blender pinhole)",
+    "fov_convention": "Blender horizontal camera angle for 4:3 sensor fit",
+    "fx": 440.44221455077553,
+    "fy": 440.44221455077553,
+    "height": 480,
+    "horizontal_fov_degrees": 72.0,
+    "id": "ef7bd4863ce298826b4b4d5644a8a0f3e7a9d8e4a945c5e67c940a5a6d125927",
+    "width": 640
+  },
+  "episodes": 250,
+  "frames": 20000,
+  "hashes": {
+    "all": "258aff964cf2515e44ad5175d9affd79feaed7e6c02b07cc2f5a09febdbf1d19",
+    "test": "f8f5f85c2fa39011167ea798603397c0025a0e8a106fa13ce24c6a73e907cf49",
+    "train": "532c154e28b94b224c4afed724ccfc84166789fb9e57efe55c3a7bd69a0ab0c5",
+    "val": "fedbd81baa7657ab4692d0d85a68e4c7174763cef734cb354be9ddcbcdb9cdde"
+  },
+  "schema": "imagination-perception-v2",
+  "seed": 24051991,
+  "split_episodes": {
+    "test": 37,
+    "train": 175,
+    "val": 38
+  },
+  "split_frames": {
+    "test": 2960,
+    "train": 14000,
+    "val": 3040
+  }
+}

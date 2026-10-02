@@ -1,0 +1,7 @@
+model:
+  family: cnn
+  profile: research
+  state_conditioning: true
+training:
+  seed: 7
+  output: artifacts/checkpoints/cnn/seed_7

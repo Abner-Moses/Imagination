@@ -19,15 +19,15 @@ cmake --build build -j2
 ctest --test-dir build --output-on-failure
 
 # Supplied still: meaningful spatial maps; flow and geometry explicitly unavailable.
-./build/imagination pre_extract 00001.png output/analytical \
-  --config configs/pre_extraction.yaml --data --debug
+./artifacts/build/imagination pre_extract data/raw/assets/sample_01.png output/analytical \
+  --config data/configs/pre_extraction.yaml --data --debug
 
 # Known synthetic camera sequence, synthetic altitude/attitude, NOT a hardware trial.
-./build/imagination pre_extract ignored output/analytical_synthetic \
+./artifacts/build/imagination pre_extract ignored output/analytical_synthetic \
   --synthetic --frames 80 --data --debug
 
 # Ablation: channels omitted and their unnecessary dependencies skipped.
-./build/imagination pre_extract 00001.png output/ablated \
+./artifacts/build/imagination pre_extract data/raw/assets/sample_01.png output/ablated \
   --without hog,roughness,contours --no-geometry --debug
 ```
 
@@ -48,14 +48,14 @@ to select a declared warmup interval for comparisons.
 ### Real sequences and cameras
 
 ```sh
-./build/imagination pre_extract sequence.yaml output/sequence \
+./artifacts/build/imagination pre_extract sequence.yaml output/sequence \
   --sequence --calibration camera.yaml --frames 500 --data --debug
 
 cmake -S . -B build -DBUILD_MOTION_CAMERA=ON
 cmake --build build -j2
-./build/imagination pre_extract 0 output/live --camera --frames 300 \
+./artifacts/build/imagination pre_extract 0 output/live --camera --frames 300 \
   --calibration camera.yaml --imu /tmp/imu.txt --ultrasonic /tmp/range.txt
-./build/imagination pre_extract recording.mp4 output/video --video --frames 300
+./artifacts/build/imagination pre_extract recording.mp4 output/video --video --frames 300
 ```
 
 A sequence manifest uses explicit timestamps and optional per-frame sensor samples:
@@ -451,8 +451,8 @@ for the underlying classical operations.
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
 cmake --build build -j
-./build/visual_features 00001.png output/pre_extraction --benchmark 100 --data
-./build/visual_features 00001.png output/edges \
+./artifacts/build/visual_features data/raw/assets/sample_01.png output/pre_extraction --benchmark 100 --data
+./artifacts/build/visual_features data/raw/assets/sample_01.png output/edges \
   --features gradients,edge_magnitude,edge_orientation --benchmark 100
 ctest --test-dir build --output-on-failure
 ```
@@ -463,7 +463,7 @@ units, points, contours, coordinate metadata and spatial settings. Its motion
 section is a summary; the in-process API exposes the full motion result/settings.
 JPEG contrast/color mapping is for inspection only and does not alter exported data.
 
-The supplied `00001.png` is 512×512 and becomes 240×240 without aspect distortion.
+The supplied `data/raw/assets/sample_01.png` is 512×512 and becomes 240×240 without aspect distortion.
 Neither root sample has verified temporal timing or calibration, so the JPEG
 marks motion unavailable. It does not claim their difference is real motion.
 Temporal integration is tested with known synthetic sequential warps. Actual
@@ -479,7 +479,7 @@ serialization are excluded from extraction timing. Times are wall-clock latency,
 not wattage or process CPU utilization.
 
 Measured on 2026-09-27, Apple M3 Pro, OpenCV 5.0.0, Release build, one thread,
-100 measured repetitions of `00001.png` after 10 warmups:
+100 measured repetitions of `data/raw/assets/sample_01.png` after 10 warmups:
 
 | Selection | Mean ms | Median ms | p95 ms | Worst ms |
 | --- | ---: | ---: | ---: | ---: |

@@ -1,0 +1,10 @@
+extends:
+  - ../../common/configs/model_common.yaml
+  - ../config.yaml
+model:
+  fusion: flat
+  attention:
+    mode: dense
+    position_bias: relative
+training:
+  output: artifacts/checkpoints/imf_ablation/flat_1x1_fusion/seed_7

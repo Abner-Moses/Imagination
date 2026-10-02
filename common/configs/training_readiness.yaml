@@ -1,0 +1,23 @@
+schema: imagination-training-readiness-v1
+expected_episodes: 250
+expected_frames: 20000
+target_effective_batch: 8
+micro_batch_candidates: [8, 4, 2, 1]
+contract_samples_per_split: 24
+candidate_coverage_frames_per_split: 160
+overfit:
+  samples: 16
+  steps: 30
+  learning_rate: 0.003
+  minimum_relative_loss_drop: 0.10
+  criterion_note: engineering smoke threshold; not a scientific performance threshold
+runtime_probe:
+  training_batches: 5
+  validation_batches: 3
+  map_context_frames: 32
+disk:
+  safety_multiplier: 1.25
+  validation_artifacts_gb: 2.0
+development:
+  seed: 7
+  max_epochs: 2

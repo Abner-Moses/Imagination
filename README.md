@@ -1,136 +1,166 @@
 # Imagination
 
-A C++17/OpenCV research project for **GPS-denied UAV perception**.
-It uses classical camera mathematics to extract visual features, estimate motion,
-reconstruct terrain, and check potential landing sites.
+Imagination asks whether a resource-constrained UAV can reduce learned computation
+by calculating known visual, geometric, probabilistic, and physical relationships
+before inference. The Imagination Math Framework (IMF) supplies those facts. A
+convolution-assisted HTransformer learns the remaining semantic and contextual
+relationships.
 
-Research direction: **sensors → analytic pre-extraction → convolution-assisted
-Transformer → navigation**. The camera and geometric stages exist today. The full
-sensor framework and learned model are future work; resource and safety comparisons
-against CNN-ViT systems still require experiments.
+The repository contains the frozen pre-LBA experiment. Its architecture is
+implemented and training-ready; primary accuracy and resource conclusions have not
+yet been established.
 
-The primary analytical research profile now produces a **28×32×32 float32 tensor**
-with channel names, per-cell validity masks, timings and reconstruction diagnostics.
-It extends the existing visual extractor; no learned adapter or Transformer is run.
+## Research idea
 
-```sh
-./build/imagination pre_extract 00001.png output/analytical --data --debug
-./build/imagination pre_extract ignored output/analytical_synthetic --synthetic --frames 80 --debug
-```
+IMF computes analytical appearance, motion, geometry, uncertainty, causal map
+memory, evidence fusion, visibility, distance, density, clearance, and drift.
+Convolution handles local learned structure. Limited attention combines distant
+spatial and persistent-map context.
 
-Open `output/analytical/analytical_features.jpg`. The still image has no valid
-motion or metric geometry; the separate synthetic sequence exercises those paths.
-See the [tensor, sequence, camera and ablation guide](docs/pre_extraction.md).
+    camera + vehicle sensors
+            |
+            +-- RGB observation ----------------------+
+            |                                         |
+            +-- IMF analytical observation + validity |
+                                                      v
+                                      model-specific local encoder
+                                                      |
+                                 prior predicted map--+
+                                                      v
+                                  residual contextual reasoning
+                                                      |
+                                                      v
+                           dense maps + scene/candidate verdicts
+                                                      |
+                                          current prediction updates map
 
-## Build and try it
+The predicted map is causal. Frame t receives map context built through frame t-1;
+frame t updates the map only after inference. Simulator labels and target-only depth
+are supervision artifacts and never populate the predicted map.
 
-Install CMake, a C++17 compiler and OpenCV (`brew install cmake opencv` on macOS), then:
+## Models
 
-```sh
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
-cmake --build build -j2
-ctest --test-dir build --output-on-failure
-./build/imagination visual_features 00001.png output/pre_extraction --data
-```
+| ID | Observation | Role |
+|---|---|---|
+| cnn | RGB | Local convolutional baseline |
+| cnn_vit | RGB | CNN with conventional global attention |
+| cnn_htransformer | RGB | CNN-HTransformer (CoHAtNet-inspired) baseline |
+| imf_htransformer | 28 IMF channels and validity | Imagination IMF-HTransformer |
 
-Open `output/pre_extraction/visual_features.jpg`. It shows gradients, edges,
-corners, keypoints, color transitions, texture, contours and boundaries. Motion is
-unavailable for this still image because its timing and calibration are unknown.
-Add `--benchmark 100` to profile each feature separately.
+All four models share the state, relation, candidate, output-head, loss, evaluation,
+checkpoint, and training contracts. Their front-end observations differ by design,
+so the primary experiment is a system comparison.
 
-## Ten C++ files, each with one responsibility
+## Repository layout
 
-| File | What belongs here |
-| --- | --- |
-| [imagination.hpp](imagination.hpp) | Public settings, results and function declarations |
-| [src/internal.hpp](src/internal.hpp) | Small shared implementation declarations |
-| [src/config.cpp](src/config.cpp) | Configuration validation, argument parsing and timing summaries |
-| [src/geometry.cpp](src/geometry.cpp) | Camera math, RGB-D/stereo reconstruction and point clouds |
-| [src/terrain.cpp](src/terrain.cpp) | Terrain grids, ultrasonic ground checks and landing analysis |
-| [src/motion.cpp](src/motion.cpp) | Persistent optical-flow tracks, ego-motion and sparse triangulation |
-| [src/vision.cpp](src/vision.cpp) | Selectable image features and reusable feature data |
-| [src/output.cpp](src/output.cpp) | File exports and diagnostic images |
-| [main.cpp](main.cpp) | Commands and complete application workflows |
-| [tests.cpp](tests.cpp) | Known-input regression tests |
+| Path | Purpose |
+|---|---|
+| CNN directories and IMF_HTransformer | Model-specific front ends and configurations |
+| common/models | Shared blocks, heads, profiles, contracts, and model registry |
+| common/mapping | Causal semantic map, association, visibility, and relations |
+| common/training | Losses, metrics, readiness, checkpoints, and training engine |
+| data | External dataset location, adapters, manifests, preprocessing, and caches |
+| tools | Benchmarks, export, figures, and diagnostics |
+| tests | Python and C++ regression tests |
+| docs | Architecture, protocol, mapping, IMF, and benchmarking details |
+| artifacts | Generated checkpoints, reports, benchmarks, figures, and results |
 
-Documentation lives in `docs/`, editable examples in `configs/`, and generated
-results in `output/`. These are ordinary supporting files, outside the code-file
-budget. There is no source generation or giant combined implementation file.
+common/models/registry.py is the authoritative model registry.
+common/registry.py owns numerical and serialized contract versions.
 
-Offline dataset preparation, PyTorch training, analytical-versus-RGB baseline
-evaluation, ablations, and ONNX export live separately in
-[training/](training/README.md). Python is not required by the onboard C++ runtime.
+## Setup
 
-## Where to start as a contributor
+Use Python 3.10 or newer. Install the training dependencies:
 
-Read the [beginner architecture guide](docs/architecture.md), then follow
-`VisualFeatureExtractor::extract()` in `src/vision.cpp`. It shows the steps in order:
-validate the frame, prepare it, extract selected spatial features, then update motion.
+    python -m pip install -r common/requirements.txt
 
-Use descriptive names and keep physical units (`_px`, `_m`, `_s`, `_rad`) visible.
-Edit one module at a time, add a known-input test when behavior changes, and run the
-suite before sharing your work. Keep `build/` and `output/` out of commits.
+For tests and formatting:
 
-## Commands
+    python -m pip install -r common/requirements-dev.txt
 
-**Live camera optical flow (no calibration needed for pixel movement):**
+ONNX export and detailed memory profiling use
+common/requirements-optional.txt. Building the IMF extractor also requires CMake
+3.21+, a C++17 compiler, and OpenCV development libraries.
 
-```sh
-cmake -S . -B build -DBUILD_MOTION_CAMERA=ON
-cmake --build build -j2
-mkdir -p output
-./build/imagination optical_flow 0 300 output/camera_flow > output/camera_flow.csv
-```
+## Dataset
 
-Use device `0` for the default camera, and replace `300` with the desired frame
-count. Create `output/` first if it does not exist (`mkdir -p output`). The CSV
-streams accepted flow in working-image pixels and pixels/second, track counts,
-quality and processing time. Arrow images are saved every ten frames when the
-optional output directory is given. The first frame initializes tracking.
-This mode reports 2-D image motion; use `motion_camera` with calibration and fresh
-altitude for approximate metric UAV velocity. See [camera flow details](docs/optical_flow.md#live-uncalibrated-optical-flow).
+The dataset is external to version control and is expected under
+data/dataset/episode_*. The frozen experiment contract contains 250 episodes and
+20,000 frames. Source frames are never regenerated by training preparation.
+Episode-grouped manifests live in data/manifests; the 28-channel IMF cache and
+target-only candidate-depth cache live in data/cache.
 
-For **IMU + ultrasonic assisted flow**, fill in measured camera calibration and
-provide live sensor snapshots from your sensor acquisition program:
+Dataset layout and provenance are documented in [data/README.md](data/README.md).
 
-```sh
-./build/imagination optical_flow 0 300 output/camera_flow \
-  --camera configs/motion_camera.yaml \
-  --imu /tmp/imu.txt --ultrasonic /tmp/range.txt
-```
+## Prepare training
 
-IMU yaw constrains rotation; ultrasonic height supplies metric scale. Missing,
-stale or unsupported IMU readings suppress metric output when `--imu` is enabled.
-The [sensor input guide](docs/sensor_inputs.md) defines timestamps, axes, file
-formats and the direct C++ API. Hardware acquisition remains outside the tracker.
+Run the complete, repeatable readiness pipeline:
 
-Run `./build/imagination --help` to list enabled commands. Existing names such as
-`./build/visual_features` and `./build/two_view` still work.
+    python train_research_sequence.py --prepare-only
 
-| Command after `./build/imagination` | Purpose |
-| --- | --- |
-| `pre_extract INPUT OUTPUT ...` | Analytical tensor from a still, timestamped sequence, video or camera; optional exports/diagnostics |
-| `optical_flow [device=0] [frames=300] [debug_directory]` | Live sparse webcam flow without calibration; pixel units only |
-| `visual_features IMAGE OUTPUT [--features NAMES] [--benchmark N] [--data]` | Image features, JPEG, reusable data and profiling |
-| `motion_benchmark --frames 500 [--triangulate]` | Synthetic motion and runtime measurements |
-| `motion_camera ...` | Calibrated webcam tracking; enable `BUILD_MOTION_CAMERA` first |
-| `two_view IMAGE1 IMAGE2 FX FY CX CY BASELINE_M` | Calibrated metric stereo |
-| `two_view --demo 00001.png 00002.png` | Explicitly synthetic geometry for checking outputs |
-| `metric_mapper configs/reconstruction.yaml` | Registered RGB-D with measured calibration and supplied poses |
+It validates source data and frozen splits, completes stale derived caches, computes
+train-only statistics, checks candidate supervision and causal ordering, runs Python
+and C++ tests, exercises all four models on real data, verifies tiny overfit and
+checkpoint resume, probes micro-batches, and writes a frozen training plan.
 
-All build switches remain: `BUILD_TWO_VIEW`, `BUILD_RGBD`, `BUILD_MOTION`,
-`BUILD_MOTION_CAMERA`, `BUILD_VISUAL_FEATURES`, and `BUILD_TESTING`.
-For webcam support, configure with `-DBUILD_MOTION_CAMERA=ON` and rebuild.
-The YAML examples deliberately require real sensor values before flight use.
+A fast dataset-independent developer check is also available:
 
-For C++ integration, include `imagination.hpp`, use namespace `metric_mapping`,
-and link `Imagination::core`. Existing library aliases and generated compatibility
-include paths remain available. Prefer the public header over `src/internal.hpp`.
+    python run.py --check
 
-## Reference
+## Train
 
-- [Camera features, API, ablations and future model connections](docs/pre_extraction.md)
-- [Optical flow, motion equations, altitude scale and triangulation](docs/optical_flow.md)
-- [Stereo, RGB-D, terrain, landing and output formats](docs/reconstruction.md)
-- [Coordinate and unit conventions](docs/coordinates.md)
-- [Recorded motion benchmarks and limitations](docs/motion_benchmark.md)
+    python train_research_sequence.py
+
+The command reruns readiness, resumes matching work, and trains 12 runs in this
+order:
+
+1. CNN-HTransformer (CoHAtNet-inspired), seeds 7, 17, 29
+2. CNN-ViT, seeds 7, 17, 29
+3. CNN, seeds 7, 17, 29
+4. Imagination IMF-HTransformer, seeds 7, 17, 29
+
+Each run has an 80-epoch maximum and validation-based early stopping. Completed
+matching runs are skipped; incompatible checkpoints fail clearly. --force is
+required to replace existing work. Development mode uses a separate artifact
+namespace:
+
+    python train_research_sequence.py --mode development
+
+## Evaluation
+
+Training and model development use train and validation data only. The normal
+sequence never evaluates the final held-out test split. Final test evaluation is a
+separate deliberate step after the primary protocol and selection rules are frozen.
+Generated checkpoints and summaries are stored under artifacts.
+
+## Reproducibility
+
+The training plan records manifest and model-config hashes, architecture and cache
+versions, seeds, device, optimizer and loss settings, effective batch plan, and the
+human-designed pre-LBA analytical boundary. Checkpoints are atomic and include
+model, optimizer, scheduler, scaler, RNG, progress, and compatibility metadata.
+
+The experiment protocol is in
+[docs/experiment_protocol.md](docs/experiment_protocol.md); the end-to-end design is
+in [docs/architecture.md](docs/architecture.md).
+
+## Research status and limitations
+
+Implemented mechanisms include family-aware IMF fusion, explicit validity,
+uncertainty-aware causal mapping, Mahalanobis association, bounded semantic evidence
+fusion, egocentric relations, candidate-centered landing geometry, and optional
+gathered sparse attention. Their task and resource effects remain experimental.
+
+Current limitations include approximate pose covariance, point-to-disc region
+boundaries, center-point visibility for extended regions, reconstructed rather than
+sensed deployment depth, synthetic-domain data, development-machine performance
+measurements, and no target-device energy measurement. Sparse score-pair reduction
+has not by itself established a latency reduction.
+
+The IMF Learning-Boundary Auditor is future experimental work relative to this
+primary pre-LBA baseline. It is not invoked by readiness or training.
+
+## Citation
+
+A paper citation is not yet available. Cite the repository revision and frozen
+training-plan hash when reporting results.

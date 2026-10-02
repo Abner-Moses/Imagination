@@ -1,0 +1,17 @@
+model:
+  family: imf_htransformer
+  profile: research
+  state_conditioning: true
+  fusion: family
+  disabled_families: []
+  attention:
+    mode: sparse
+    selection: metric
+    position_bias: metric
+    weight: 0.5
+    scale_m: 4.0
+    neighbors: 32
+    qk_normalize: false
+training:
+  seed: 7
+  output: artifacts/checkpoints/imf_htransformer/seed_7

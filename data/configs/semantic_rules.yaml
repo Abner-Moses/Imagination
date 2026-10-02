@@ -1,0 +1,71 @@
+# Domain semantics are configuration, not global assumptions in the map code.
+semantic_rules:
+  track:
+    fly_allowed: false
+    land_allowed: false
+  grass:
+    fly_allowed: true
+    land_allowed: true
+  cone:
+    fly_allowed: true
+    land_allowed: false
+  rock:
+    fly_allowed: true
+    land_allowed: false
+  other_obstacle:
+    fly_allowed: true
+    land_allowed: false
+  background:
+    fly_allowed: true
+    land_allowed: false
+map:
+  association_distance_m: 0.75
+  association_mode: mahalanobis
+  mahalanobis_threshold_squared: 11.34
+  voxel_size_m: 0.20
+  max_entities: 4096
+  max_age_seconds: 120
+  max_local_radius_m: 20
+  maximum_candidate_tokens: 32
+  semantic_fusion: bayesian
+  # Minimum shared posterior mass required for spatial entity association.
+  # This allows soft contradictory observations to update evidence while
+  # keeping nearly disjoint class hypotheses as separate entities.
+  semantic_overlap_threshold: 0.1
+  semantic_rule_probability_threshold: 0.1
+  # Within a spatially and covariance-supported surface region, allow class
+  # contradictions such as grass <-> track to update Bayesian evidence.
+  semantic_association_groups:
+    - [background, grass, track]
+  evidence_correlation_time_seconds: 1.0
+  evidence_decay_per_second: 0.0
+  maximum_semantic_evidence: 50.0
+  pose_translation_sigma_floor_m: 0.01
+  pose_translation_sigma_at_zero_support_m: 0.5
+  pose_rotation_sigma_floor_rad: 0.002
+  pose_rotation_sigma_at_zero_support_rad: 0.15
+  observation_pixel_sigma: 1.0
+  depth_sigma_base_m: 0.02
+  depth_sigma_relative: 0.01
+  use_uncertainty: true
+  use_visibility: true
+  canonicalization: egocentric
+  visibility_depth_tolerance_m: 0.25
+  candidate_merge_cell_m: 0.5
+  merge_region_classes: [track, grass]
+  protected_poi_threshold: 0.6
+  protected_hazard_threshold: 0.5
+  protected_uncertainty_sigma_m: 0.25
+  landing_protection_radius_m: 1.0
+  candidate_importance_weights:
+    restricted_proximity: 1.0
+    uncertainty: 0.25
+    novelty: 0.2
+    poi_evidence: 0.5
+    landing_evidence: 0.5
+    hazard_evidence: 1.0
+relationships:
+  cone_density_radii_m: [1.0, 2.0, 4.0]
+  landing_time_seconds: 2.0
+  vehicle_radius_m: 0.35
+  safety_margin_m: 0.50

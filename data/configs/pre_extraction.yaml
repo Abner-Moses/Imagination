@@ -1,0 +1,74 @@
+%YAML:1.0
+---
+# Full research bank: 28 channels. This is not a minimum-cost flight profile.
+# Family names: appearance,gradients,hog,harris,canny,contours,chroma,flow,
+# depth,depth_gradients,slope,roughness,geometry_confidence
+features: "all"
+comparison_features: "none"
+working_width: 256
+working_height: 256
+grid_width: 32
+grid_height: 32
+batch_dimension: 0
+gaussian_kernel: 3
+gaussian_sigma: 1.0
+harris_k: 0.04
+harris_scale: 0.01
+canny_low: 20.0
+canny_high: 60.0
+flow_scale_px: 16.0
+flow_levels: 2
+flow_window: 15
+flow_iterations: 2
+flow_poly_n: 5
+flow_poly_sigma: 1.2
+flow_pyramid_scale: 0.5
+enable_geometry: 1
+pose_interval: 5
+pose_minimum_inliers: 12
+pose_maximum_iterations: 100
+pose_maximum_points: 32
+pose_threshold_px: 1.0
+pose_minimum_parallax_rad: 0.01745329252
+pose_maximum_reprojection_error_px: 1.0
+pose_maximum_relative_depth: 100.0
+maximum_tracks: 100
+replenish_below: 60
+corner_quality: 0.01
+corner_distance_px: 7.0
+corner_block_size: 3
+forward_backward: 1
+# The 256 px simulator frames contain perspective/parallax from non-flat terrain.
+# Three pixels keeps the cheap similarity consensus robust without pretending the
+# scene is an exact plane; RANSAC, coverage and inlier-fraction gates still apply.
+motion_model_error_px: 3.0
+# Two sparse LK pyramid levels recover the roughly 20-pixel inter-frame motion
+# in the 10 Hz simulator sequences. This still processes only about 100 points.
+motion_pyramid_levels: 2
+motion_window: 15
+require_imu: 0
+triangulation_interval: 5
+maximum_triangulations_per_frame: 4
+minimum_baseline_m: 0.05
+minimum_parallax_rad: 0.01745329252
+maximum_reprojection_error_px: 1.0
+maximum_depth_m: 100.0
+maximum_map_points: 256
+maximum_grid_cells: 4096
+map_radius_m: 5.0
+map_age_s: 10.0
+voxel_size_m: 0.05
+grid_resolution_m: 0.1
+idw_enabled: 1
+idw_radius_m: 0.3
+idw_maximum_distance_m: 0.3
+idw_power: 2.0
+idw_minimum_neighbors: 3
+idw_maximum_neighbors: 12
+diffusion_iterations: 5
+diffusion_time_step: 0.2
+diffusion_conductance_m: 0.05
+roughness_window: 5
+depth_scale_m: 20.0
+depth_gradient_scale: 5.0
+roughness_scale_m: 0.1

@@ -234,9 +234,9 @@ For image-space motion directly from a USB/built-in camera:
 cmake -S . -B build -DBUILD_MOTION_CAMERA=ON -DBUILD_TESTING=ON
 cmake --build build -j2
 mkdir -p output
-./build/imagination optical_flow 0 300 output/camera_flow > output/camera_flow.csv
+./artifacts/build/imagination optical_flow 0 300 output/camera_flow > output/camera_flow.csv
 # Same command through its compatibility executable:
-./build/optical_flow 0 300
+./artifacts/build/optical_flow 0 300
 ```
 
 Arguments are camera device index (default 0), frame count (default 300), and an
@@ -288,10 +288,10 @@ safe navigation.
 cmake -S . -B build -DBUILD_TESTING=ON -DBUILD_MOTION_CAMERA=ON
 cmake --build build -j2
 ctest --test-dir build --output-on-failure
-./build/motion_benchmark --frames 1000 --debug /tmp/motion-demo
-./build/motion_benchmark --frames 1000 --levels 0
-./build/motion_benchmark --frames 1000 --forward-backward --triangulate
-./build/motion_benchmark --frames 500 --speed 6
+./artifacts/build/motion_benchmark --frames 1000 --debug /tmp/motion-demo
+./artifacts/build/motion_benchmark --frames 1000 --levels 0
+./artifacts/build/motion_benchmark --frames 1000 --forward-backward --triangulate
+./artifacts/build/motion_benchmark --frames 500 --speed 6
 ```
 
 The benchmark generates reproducible warped texture, uses one CPU thread,
@@ -303,11 +303,11 @@ initialization are reported separately so warmup does not hide their cost.
 The exit code checks accuracy/validity, never a machine-specific timing limit.
 Processing-capacity FPS is not camera throughput. No watts are inferred.
 
-For a webcam, fill `configs/motion_camera.yaml` with measured calibration:
+For a webcam, fill `data/configs/motion_camera.yaml` with measured calibration:
 
 ```sh
-./build/motion_camera configs/motion_camera.yaml 0 300 > motion.csv
-./build/motion_camera configs/motion_camera.yaml 0 300 /tmp/range.txt /tmp/motion-debug > motion.csv
+./artifacts/build/motion_camera data/configs/motion_camera.yaml 0 300 > motion.csv
+./artifacts/build/motion_camera data/configs/motion_camera.yaml 0 300 /tmp/range.txt /tmp/motion-debug > motion.csv
 ```
 
 The optional range snapshot file contains exactly three numbers:

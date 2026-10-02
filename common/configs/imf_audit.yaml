@@ -1,0 +1,105 @@
+imf_audit:
+  schema: imagination-learning-boundary-v1
+  confidence_level: 0.95
+  bootstrap_samples: 1000
+  bootstrap_seed: 24051991
+  default_min_frames: 10
+  progressive_windows: [5, 10, 25, 50]
+  output_root: artifacts/results/imf_audit
+  # Optional deployment-stage timing may be supplied per operator as:
+  # measured_cost: {value: 0.0, units: milliseconds_per_frame,
+  #                 hardware: ..., os: ..., backend: ..., implementation: ...}
+
+  # Null limits are deliberate: a diagnostic may be measured, but IMF-LBA must
+  # remain UNDECIDED until mission/sensor/physics or engineering requirements
+  # are cited and frozen. Development values must identify themselves as such.
+  operators:
+    optical_flow:
+      enabled: true
+      minimum_samples: 128
+      minimum_frames: 5
+      minimum_coverage: 0.05
+      thresholds:
+        error: {value: null, units: normalized_luminance_absolute_error, source: REQUIRED}
+        uncertainty: {value: null, units: normalized_luminance_MAD, source: REQUIRED}
+        failure: {value: null, units: fraction, source: REQUIRED}
+        cost: {value: null, units: milliseconds_per_frame, source: REQUIRED}
+    depth_reconstruction:
+      enabled: true
+      minimum_samples: 128
+      minimum_frames: 5
+      minimum_coverage: 0.01
+      thresholds:
+        error: {value: null, units: metres_absolute_error, source: REQUIRED}
+        uncertainty: {value: null, units: one_minus_geometry_support, source: REQUIRED,
+                      note: "Support proxy is not calibrated covariance."}
+        failure: {value: null, units: fraction, source: REQUIRED}
+        cost: {value: null, units: milliseconds_per_frame, source: REQUIRED}
+    repeated_3d_consistency:
+      enabled: true
+      minimum_samples: 32
+      minimum_frames: 5
+      minimum_coverage: 0.01
+      thresholds:
+        error: {value: null, units: metres_map_residual, source: REQUIRED}
+        uncertainty: {value: null, units: metres_residual_MAD, source: REQUIRED}
+        failure: {value: null, units: fraction, source: REQUIRED}
+        cost: {value: null, units: milliseconds_per_frame, source: REQUIRED}
+    map_association:
+      enabled: true
+      minimum_samples: 32
+      minimum_frames: 5
+      minimum_coverage: 0.01
+      thresholds:
+        error: {value: null, units: normalized_innovation_sigma, source: REQUIRED}
+        uncertainty: {value: null, units: metres_combined_sigma, source: REQUIRED,
+                      note: "Current covariance model is approximate."}
+        failure: {value: null, units: fraction, source: REQUIRED}
+        cost: {value: null, units: milliseconds_per_observation, source: REQUIRED}
+    semantic_evidence_fusion:
+      enabled: true
+      minimum_samples: 10
+      minimum_frames: 10
+      minimum_coverage: 1.0
+      thresholds:
+        error: {value: null, units: probability_normalization_error, source: REQUIRED}
+        uncertainty: {value: null, units: nats_posterior_entropy, source: REQUIRED}
+        failure: {value: null, units: fraction, source: REQUIRED}
+        cost: {value: null, units: milliseconds_per_observation, source: REQUIRED}
+    visibility:
+      enabled: true
+      minimum_samples: 64
+      minimum_frames: 5
+      minimum_coverage: 1.0
+      thresholds:
+        error: {value: null, units: disagreement_fraction, source: REQUIRED}
+        uncertainty: {value: null, units: metres_depth_discrepancy, source: REQUIRED}
+        failure: {value: null, units: unknown_fraction, source: REQUIRED}
+        cost: {value: null, units: milliseconds_per_entity, source: REQUIRED}
+    drift_prediction:
+      enabled: true
+      minimum_samples: 3
+      minimum_frames: 5
+      minimum_coverage: 0.5
+      thresholds:
+        error: {value: null, units: metres_horizontal_displacement_error, source: REQUIRED}
+        uncertainty: {value: null, units: metres_residual_MAD, source: REQUIRED}
+        failure: {value: null, units: fraction, source: REQUIRED}
+        cost: {value: null, units: milliseconds_per_prediction, source: REQUIRED}
+
+    # Registry placeholders: correctness or task utility needs a defensible,
+    # responsibility-specific diagnostic before IMF-LBA may decide.
+    color_conversion: {enabled: false}
+    image_gradients: {enabled: false}
+    orientation_structure: {enabled: false}
+    corner_detection: {enabled: false}
+    edge_extraction: {enabled: false}
+    chroma_transitions: {enabled: false}
+    geometry_confidence: {enabled: false}
+    position_uncertainty: {enabled: false}
+    depth_gradient: {enabled: false}
+    surface_slope: {enabled: false}
+    surface_roughness: {enabled: false}
+    obstacle_density: {enabled: false}
+    restricted_zone_distance: {enabled: false}
+    landing_clearance: {enabled: false}

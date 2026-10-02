@@ -1,0 +1,52 @@
+data:
+  manifest: data/manifests/all.jsonl
+  validate_files: true
+model:
+  profile: research
+  map_context: true
+  state_dim: 13
+  state_conditioning: true
+  semantic_classes: 6
+  poi_classes: 7
+  relation_dim: 30
+  maximum_candidate_tokens: 32
+training:
+  max_epochs: 80
+  early_stopping_patience: 12
+  early_stopping_min_epochs: 8
+  early_stopping_min_delta: 0.001
+  batch_size: 8
+  workers: 0
+  learning_rate: 0.0003
+  weight_decay: 0.0001
+  gradient_accumulation: 1
+  gradient_clip: 1.0
+  mixed_precision: true
+  deterministic: true
+  device: auto
+  checkpoint_every_batches: 250
+losses:
+  hazard_weight: 1.0
+  landing_weight: 1.0
+  poi_weight: 1.0
+  semantic_weight: 0.5
+  scene_weight: 0.25
+  candidate_weight: 0.25
+  hazard_positive_weight: auto
+  landing_positive_weight: auto
+  poi_positive_weight: auto
+  hazard_false_negative_weight: 0.7
+  overlap_weight: 0.5
+thresholds:
+  hazard: 0.5
+  landing: 0.5
+  poi: 0.5
+poi:
+  classes:
+    cone: 3
+    rock: 4
+    football: 5
+    bag: 6
+    box: 7
+    pole: 8
+    chair: 9

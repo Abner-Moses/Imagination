@@ -1,0 +1,88 @@
+dataset:
+  output_dir: dataset
+  num_episodes: 5
+  trajectories_per_layout: 1
+  frames_per_trajectory: 20
+  base_seed: 24051991
+  overwrite: false
+
+render:
+  width: 640
+  height: 480
+  engine: BLENDER_EEVEE
+  jpeg_quality: 92
+  samples: 8
+  camera_fov_degrees: 72.0
+  camera_down_tilt_degrees: 90.0
+  clip_start_m: 0.05
+  clip_end_m: 220.0
+
+timing:
+  fps: 10.0
+
+field:
+  grass_length_m: 160.0
+  grass_width_m: 80.0
+  outer_track_length_m: 180.0
+  outer_track_width_m: 96.0
+  terrain_rings: 160
+  terrain_segments: 256
+  grass_blades_per_m2: 850
+
+terrain:
+  broad_amplitude_m: [0.035, 0.10]
+  fine_amplitude_m: [0.004, 0.014]
+  feature_count: [3, 7]
+  feature_amplitude_m: [-0.075, 0.075]
+  feature_sigma_m: [3.5, 11.0]
+
+landing:
+  boundary_caution_m: 2.0
+  obstacle_clearance_m: 0.35
+  classes: {unsafe: 0, caution: 1, safe: 2}
+
+sampling:
+  # Duplicates are intentional sampling weights. Every episode remains a
+  # continuous flight through one fixed scene.
+  view_modes: [field_interior, field_interior, field_hazard, near_track,
+               boundary_mixed, boundary_mixed, track_surface, track_surface]
+
+clutter:
+  min_objects: 14
+  max_objects: 28
+  min_separation_m: 1.15
+  density_profiles: [cone_sparse, cone_dense, mixed_sparse, mixed_dense, mixed_medium]
+  profile_object_ranges:
+    cone_sparse: [5, 11]
+    cone_dense: [30, 48]
+    mixed_sparse: [6, 13]
+    mixed_dense: [28, 44]
+    mixed_medium: [14, 27]
+  styles: [random_scatter, clusters, corridors, slalom, gates, mixed]
+  asset_types: [cone, rock_1, rock_2, rock_3, rock_4, rock_5, rock_6, rock_7, football, backpack, box, pole, chair]
+
+trajectory:
+  types: [straight, diagonal, curved, lawnmower, smooth_random_waypoint, hover_rotate_translate]
+  min_ground_clearance_m: 1.0
+  max_ground_clearance_m: 3.0
+  nominal_speed_mps: [1.1, 2.2]
+  max_roll_degrees: 5.0
+  max_pitch_degrees: 6.0
+  max_yaw_rate_degrees_s: 28.0
+  safe_ellipse_axes_m: [68.0, 30.0]
+
+sensors:
+  noise_enabled: false
+  gravity_mps2: 9.80665
+  magnetic_field_world_uT: [20.5, 1.2, -44.0]
+  noise_std:
+    position_m: 0.01
+    velocity_mps: 0.015
+    acceleration_mps2: 0.035
+    gyro_radps: 0.003
+    magnetometer_uT: 0.12
+    ultrasonic_m: 0.006
+
+validation:
+  max_position_step_m: 0.75
+  max_orientation_step_degrees: 12.0

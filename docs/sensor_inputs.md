@@ -44,8 +44,8 @@ mounting orientation and echo timeout handling belong in the acquisition adapter
 ```sh
 cmake -S . -B build -DBUILD_MOTION=ON -DBUILD_MOTION_CAMERA=ON
 cmake --build build -j2
-./build/imagination optical_flow 0 300 output/camera_flow \
-  --camera configs/motion_camera.yaml \
+./artifacts/build/imagination optical_flow 0 300 output/camera_flow \
+  --camera data/configs/motion_camera.yaml \
   --imu /tmp/imu.txt --ultrasonic /tmp/range.txt
 ```
 
@@ -54,7 +54,7 @@ calibrated path rejects a delivered size mismatch and assumes rectified frames.
 For existing callers this is equivalent to:
 
 ```sh
-./build/imagination motion_camera configs/motion_camera.yaml 0 300 \
+./artifacts/build/imagination motion_camera data/configs/motion_camera.yaml 0 300 \
   --imu /tmp/imu.txt --ultrasonic /tmp/range.txt
 ```
 
@@ -183,7 +183,7 @@ To profile the sensor-assisted path using synthetic, perfectly synchronized
 attitude and height (not physical sensor readings):
 
 ```sh
-./build/imagination motion_benchmark --frames 500 --imu
+./artifacts/build/imagination motion_benchmark --frames 500 --imu
 ```
 
 Measured on the development Apple M3 Pro, Release/OpenCV 5.0.0, one OpenCV

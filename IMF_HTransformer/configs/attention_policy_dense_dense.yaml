@@ -1,0 +1,13 @@
+extends:
+  - ../../common/configs/model_common.yaml
+  - ../config.yaml
+model:
+  attention:
+    mode: dense
+    stage3_mode: dense
+    stage4_mode: dense
+    stage3_use_map_context: true
+    stage4_use_map_context: true
+    position_bias: metric
+training:
+  output: artifacts/checkpoints/imf_ablation/attention_policy_dense_dense/seed_7

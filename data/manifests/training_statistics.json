@@ -1,0 +1,48 @@
+{
+  "manifest_hash": "258aff964cf2515e44ad5175d9affd79feaed7e6c02b07cc2f5a09febdbf1d19",
+  "manifest_path": "/Users/abnermoses/Workspace/Imagination/data/manifests/all.jsonl",
+  "positive_cells": {
+    "hazard": 10246424,
+    "landing": 4077538,
+    "poi": [
+      242493,
+      104481,
+      78994,
+      72423,
+      60797,
+      41224,
+      36263
+    ]
+  },
+  "positive_weights": {
+    "hazard": 1.0,
+    "landing": 2.5158470626147444,
+    "poi": [
+      50.0,
+      50.0,
+      50.0,
+      50.0,
+      50.0,
+      50.0,
+      50.0
+    ]
+  },
+  "samples": 14000,
+  "schema": "imagination-training-statistics-v2",
+  "source_split": "train",
+  "statistic_version": "target-positive-weights-v2",
+  "total_cells": {
+    "hazard": 14336000,
+    "landing": 14336000,
+    "poi": [
+      14336000,
+      14336000,
+      14336000,
+      14336000,
+      14336000,
+      14336000,
+      14336000
+    ]
+  },
+  "train_split_hash": "7ad6b54cd44f9bb9a90ca4214a4c1fcf8aed00cc333f00907a2f600469c47124"
+}

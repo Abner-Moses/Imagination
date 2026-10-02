@@ -1,0 +1,34 @@
+schema: imagination-perception-v2
+raw_root: data/dataset
+manifest_root: data/manifests
+cache_root: data/cache
+calibration_root: data/calibration
+split_seed: 24051991
+split_ratios:
+  train: 0.70
+  val: 0.15
+  test: 0.15
+group_by:
+  - episode_id
+  - environment_id
+  - trajectory_id
+image:
+  width: 640
+  height: 480
+analytical:
+  extractor: artifacts/build/imagination
+  config: data/configs/pre_extraction.yaml
+  registry_version: imagination-analytical-v1
+  channels: 28
+  grid: [32, 32]
+targets:
+  hazard_positive_source_ids: [0, 1]
+  landing_positive_source_ids: [2]
+  poi_classes:
+    cone: 3
+    rock: 4
+    football: 5
+    bag: 6
+    box: 7
+    pole: 8
+    chair: 9

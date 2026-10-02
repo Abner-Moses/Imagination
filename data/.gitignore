@@ -1,0 +1,8 @@
+.venv/
+.blenderproc_blender/
+.runtime/
+dataset/
+__pycache__/
+*.pyc
+.DS_Store
+

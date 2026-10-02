@@ -1,0 +1,33 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": {"major": 3, "minor": 21, "patch": 0},
+  "configurePresets": [
+    {
+      "name": "default",
+      "displayName": "Imagination release build",
+      "binaryDir": "${sourceDir}/artifacts/build",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "BUILD_TESTING": "ON"
+      }
+    },
+    {
+      "name": "windows-msvc",
+      "displayName": "Imagination Windows MSVC build",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/artifacts/build-windows",
+      "cacheVariables": {
+        "BUILD_TESTING": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    {"name": "default", "configurePreset": "default"},
+    {"name": "windows-msvc", "configurePreset": "windows-msvc", "configuration": "Release"}
+  ],
+  "testPresets": [
+    {"name": "default", "configurePreset": "default", "output": {"outputOnFailure": true}},
+    {"name": "windows-msvc", "configurePreset": "windows-msvc", "configuration": "Release", "output": {"outputOnFailure": true}}
+  ]
+}

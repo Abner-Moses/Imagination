@@ -1,0 +1,7 @@
+model:
+  family: cnn_htransformer
+  profile: research
+  state_conditioning: true
+training:
+  seed: 7
+  output: artifacts/checkpoints/cnn_htransformer/seed_7

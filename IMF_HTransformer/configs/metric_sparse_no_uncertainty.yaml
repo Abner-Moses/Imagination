@@ -1,0 +1,12 @@
+extends:
+  - ../../common/configs/model_common.yaml
+  - ../config.yaml
+model:
+  attention:
+    mode: sparse
+    position_bias: metric
+    neighbors: 32
+mapping:
+  use_uncertainty: false
+training:
+  output: artifacts/checkpoints/imf_ablation/metric_sparse_no_uncertainty/seed_7

@@ -1,0 +1,626 @@
+{
+  "assets": {
+    "brown_mud": {
+      "attributes": {
+        "condition": [
+          "weathered"
+        ],
+        "origin": "natural",
+        "setting": "outdoor",
+        "surface_use": "ground"
+      },
+      "authors": {
+        "Rob Tuytel": "All"
+      },
+      "categories": [
+        "terrain",
+        "natural",
+        "outdoor"
+      ],
+      "category": "Ground & Terrain/Soil & Mud/Bare Dirt & Soil",
+      "category_id": "d9215ca1-f9af-578a-a269-6cd2338bdba6",
+      "date_published": 1529359200,
+      "description": "Free 8K texture of brown mud with dry, granular soil, scattered stones, twigs and plant debris, rough compacted surface and organic earthy variation.",
+      "dimensions": [
+        1299.996018409729,
+        1299.996018409729
+      ],
+      "download_count": 55534,
+      "files_hash": "0b3fc1acb1a5e7d01c2757f2a426240b48954988",
+      "img_version": "bd93589e",
+      "max_resolution": [
+        8192,
+        8192
+      ],
+      "name": "Brown Mud",
+      "old_id": 77,
+      "scale": "1,3",
+      "sponsors": [
+        "7934315"
+      ],
+      "tags": [
+        "mud",
+        "dirt",
+        "stones",
+        "dry",
+        "ground",
+        "soil",
+        "plant debris",
+        "granular",
+        "organic matter",
+        "earthy",
+        "twigs",
+        "earth"
+      ],
+      "thumbnail_url": "https://cdn.polyhaven.com/asset_img/thumbs/brown_mud.png?width=256&height=256&v=bd93589e",
+      "type": 1
+    },
+    "cardboard_box_01": {
+      "attributes": {
+        "condition": [
+          "worn"
+        ],
+        "material": [
+          "paper"
+        ]
+      },
+      "authors": {
+        "Rahul Chaudhary": "All"
+      },
+      "categories": [
+        "industrial",
+        "containers",
+        "collection: the_shed"
+      ],
+      "category": "Containers & Storage/Boxes & Crates/Cardboard Boxes",
+      "category_id": "2b755d16-ccc5-53d7-87f2-217bb6122eff",
+      "collections": [
+        "the_shed"
+      ],
+      "date_published": 1671148800,
+      "description": "Free 4K model of a worn, creased cardboard box with torn flaps, taped seams and a weathered strap - aged, dented paper texture and realistic damage.",
+      "dimensions": [
+        387.02359795570374,
+        515.8704221248627,
+        341.7995423078537
+      ],
+      "donated": true,
+      "download_count": 34973,
+      "files_hash": "2a37ded0aeebc15100db0e1d285ad36cf40b8f42",
+      "img_version": "9b57d609",
+      "info": null,
+      "max_resolution": [
+        4096,
+        4096
+      ],
+      "name": "Cardboard Box 01",
+      "polycount": 16952,
+      "sponsors": [
+        "26820710"
+      ],
+      "staging": null,
+      "tags": [
+        "warehouse",
+        "shed",
+        "storage",
+        "box",
+        "paper",
+        "worn",
+        "old",
+        "broken",
+        "damaged",
+        "garage"
+      ],
+      "texel_density": 3131.7654492951356,
+      "thumbnail_url": "https://cdn.polyhaven.com/asset_img/thumbs/cardboard_box_01.png?width=256&height=256&v=9b57d609",
+      "type": 2
+    },
+    "dirty_football": {
+      "attributes": {
+        "condition": [
+          "worn"
+        ],
+        "lods": true,
+        "material": [
+          "leather",
+          "rubber"
+        ]
+      },
+      "authors": {
+        "Rohit Seervi": "All"
+      },
+      "categories": [
+        "props"
+      ],
+      "category": "Leisure/Sports/Balls",
+      "category_id": "ba452b18-0442-5d9d-b0b6-2f001f956f6d",
+      "date_published": 1697846400,
+      "description": "Free 8K model of a weathered, dirty soccer ball with stitched panels, scuffs, faded leather tones and realistic dirt buildup for a well-used vintage look.",
+      "dimensions": [
+        221.3953733444214,
+        220.00925242900848,
+        220.0465425848961
+      ],
+      "donated": true,
+      "download_count": 8298,
+      "files_hash": "b27ae02f28eda2ef7e2b5ee925fdad06b3346617",
+      "img_version": "3b263524",
+      "info": null,
+      "lods": true,
+      "max_resolution": [
+        8192,
+        8192
+      ],
+      "name": "Dirty Football",
+      "polycount": 37486,
+      "sponsors": [
+        "84390067"
+      ],
+      "staging": null,
+      "tags": [
+        "shed",
+        "toy",
+        "soccer",
+        "sports",
+        "sport",
+        "ball",
+        "game",
+        "field",
+        "stadium",
+        "dirty",
+        "dirt"
+      ],
+      "texel_density": 15995.23414260915,
+      "thumbnail_url": "https://cdn.polyhaven.com/asset_img/thumbs/dirty_football.png?width=256&height=256&v=3b263524",
+      "type": 2
+    },
+    "grass_ground": {
+      "attributes": {
+        "condition": [
+          "dirty"
+        ],
+        "origin": "natural",
+        "setting": "outdoor",
+        "surface_use": "ground"
+      },
+      "authors": {
+        "Charlotte Baglioni": "All"
+      },
+      "categories": [
+        "outdoor",
+        "natural",
+        "terrain",
+        "dirty"
+      ],
+      "category": "Ground & Terrain/Grass & Vegetation/Dry & Sparse Grass",
+      "category_id": "e9516d71-1efd-51d6-b3c4-ce945ee92604",
+      "date_published": 1789689600,
+      "description": "Free 16K texture of worn grass on soil, matte and rough, with fine micro-bumps, subtle height, and natural brown-green variation.",
+      "dimensions": [
+        2509.999990463257,
+        2509.999990463257
+      ],
+      "download_count": 4058,
+      "files_hash": "0835c92f7cacee85b306c2a35d2c006be11ea3c2",
+      "img_version": "6fb7fdcf",
+      "max_resolution": [
+        16384,
+        16384
+      ],
+      "name": "Grass Ground",
+      "staging": null,
+      "tags": [
+        "grass",
+        "dry grass",
+        "dirt",
+        "root",
+        "dead grass",
+        "turf",
+        "dry"
+      ],
+      "thumbnail_url": "https://cdn.polyhaven.com/asset_img/thumbs/grass_ground.png?width=256&height=256&v=6fb7fdcf",
+      "type": 1
+    },
+    "namaqualand_stones_01": {
+      "attributes": {
+        "condition": [
+          "weathered"
+        ],
+        "lods": true,
+        "material": [
+          "stone"
+        ]
+      },
+      "authors": {
+        "Greg Zaal": "Photography",
+        "Jenelle van Heerden": "modeling"
+      },
+      "categories": [
+        "nature",
+        "rocks",
+        "collection: namaqualand"
+      ],
+      "category": "Nature/Rocks & Stone/Stone Sets",
+      "category_id": "75be0f95-5fbf-5ce3-94a8-4b929bf42fb6",
+      "collections": [
+        "namaqualand"
+      ],
+      "date_published": 1728345600,
+      "description": "Free 8K model of weathered Namaqualand quartz stones, varied Karoo desert rocks from South Africa, realistic, high-detail assets for nature and geological scenes.",
+      "dimensions": [
+        1022.2714990377426,
+        112.1760904788971,
+        84.22087505459785
+      ],
+      "download_count": 6820,
+      "files_hash": "56a5d069e1b0eb31d342e677d39a23649a5265dd",
+      "img_version": "89ae1982",
+      "lods": true,
+      "max_resolution": [
+        8192,
+        8192
+      ],
+      "name": "Namaqualand Stones 01",
+      "polycount": 106602,
+      "staging": null,
+      "tags": [
+        "karoo",
+        "south africa",
+        "quartz",
+        "desert",
+        "geological",
+        "mineral",
+        "stones",
+        "rocks"
+      ],
+      "texel_density": 20004.020948212077,
+      "thumbnail_url": "https://cdn.polyhaven.com/asset_img/thumbs/namaqualand_stones_01.png?width=256&height=256&v=89ae1982",
+      "type": 2
+    },
+    "plastic_monobloc_chair_01": {
+      "attributes": {
+        "condition": [
+          "worn"
+        ],
+        "material": [
+          "plastic"
+        ]
+      },
+      "authors": {
+        "Kuutti Siitonen": "All"
+      },
+      "categories": [
+        "furniture",
+        "seating",
+        "collection: the_shed"
+      ],
+      "category": "Furniture/Seating/Chairs",
+      "category_id": "11261ec6-df2b-5150-9904-684d2558070d",
+      "collections": [
+        "the_shed"
+      ],
+      "date_published": 1668384000,
+      "description": "Free 4K model: weathered white plastic monobloc chair with scuffs, dirt and faded finish, classic cheap outdoor stacking design showing age and wear.",
+      "dimensions": [
+        641.8611407279968,
+        627.5919079780579,
+        879.8411972820759
+      ],
+      "donated": true,
+      "download_count": 32793,
+      "files_hash": "fc7be38d51f2483fd3194fdbc6321cf5873742ae",
+      "img_version": "cb7077d8",
+      "info": null,
+      "max_resolution": [
+        4096,
+        4096
+      ],
+      "name": "Plastic Monobloc Chair 01",
+      "polycount": 3356,
+      "sponsors": [
+        "26820710"
+      ],
+      "staging": null,
+      "tags": [
+        "plastic",
+        "dirty",
+        "old",
+        "monobloc",
+        "outdoor",
+        "cheap",
+        "shed"
+      ],
+      "texel_density": 2690.4013569013064,
+      "thumbnail_url": "https://cdn.polyhaven.com/asset_img/thumbs/plastic_monobloc_chair_01.png?width=256&height=256&v=cb7077d8",
+      "type": 2
+    },
+    "rock_07": {
+      "attributes": {
+        "condition": [
+          "weathered"
+        ],
+        "lods": true,
+        "material": [
+          "stone"
+        ]
+      },
+      "authors": {
+        "Jenelle van Heerden": "All"
+      },
+      "categories": [
+        "rocks",
+        "nature",
+        "collection: verdant_trail"
+      ],
+      "category": "Nature/Rocks & Stone/Boulders",
+      "category_id": "229f6baa-7051-5eb5-8f2d-ed2aba17c8ea",
+      "collections": [
+        "verdant_trail"
+      ],
+      "date_published": 1707177600,
+      "description": "Free 8K model: weathered boulder with rugged erosion-worn surfaces and rich earth tones, perfect for realistic landscapes and trail or geological scenes.",
+      "dimensions": [
+        169.10234838724136,
+        320.554181933403,
+        143.77418451476842
+      ],
+      "download_count": 5834,
+      "files_hash": "dd2ca74801cd50ae5f510331cbb86e4b76b05801",
+      "img_version": "15fefa77",
+      "info": null,
+      "lods": true,
+      "max_resolution": [
+        8192,
+        8192
+      ],
+      "name": "Rock 07",
+      "polycount": 27830,
+      "staging": null,
+      "tags": [
+        "rock",
+        "stones",
+        "landscape",
+        "geology",
+        "formation",
+        "weathered",
+        "boulder"
+      ],
+      "texel_density": 14662.084214178132,
+      "thumbnail_url": "https://cdn.polyhaven.com/asset_img/thumbs/rock_07.png?width=256&height=256&v=15fefa77",
+      "type": 2,
+      "version_required": {
+        "blend": "4.0.1"
+      }
+    },
+    "rock_09": {
+      "attributes": {
+        "condition": [
+          "weathered"
+        ],
+        "lods": true,
+        "material": [
+          "stone"
+        ]
+      },
+      "authors": {
+        "Jenelle van Heerden": "All"
+      },
+      "categories": [
+        "nature",
+        "rocks",
+        "collection: verdant_trail"
+      ],
+      "category": "Nature/Rocks & Stone/Boulders",
+      "category_id": "229f6baa-7051-5eb5-8f2d-ed2aba17c8ea",
+      "collections": [
+        "verdant_trail"
+      ],
+      "date_published": 1707177600,
+      "description": "Free 8K weathered boulder model with rugged, rust-brown stone, detailed dirt and erosion - ideal for natural terrain and landscape scenes.",
+      "dimensions": [
+        74.13503155112267,
+        144.81624960899353,
+        32.94885210925713
+      ],
+      "download_count": 15337,
+      "files_hash": "1560e10c5800cc570d6e0a692fb5300443f72156",
+      "img_version": "57031fbf",
+      "info": null,
+      "lods": true,
+      "max_resolution": [
+        8192,
+        8192
+      ],
+      "name": "Rock 09",
+      "polycount": 23280,
+      "staging": null,
+      "tags": [
+        "rock",
+        "landscape",
+        "geology",
+        "formation",
+        "weathered",
+        "stone",
+        "dirt",
+        "boulder",
+        "terrain"
+      ],
+      "texel_density": 40149.92941912837,
+      "thumbnail_url": "https://cdn.polyhaven.com/asset_img/thumbs/rock_09.png?width=256&height=256&v=57031fbf",
+      "type": 2,
+      "version_required": {
+        "blend": "4.0.1"
+      }
+    },
+    "stone_01": {
+      "attributes": {
+        "condition": [
+          "weathered"
+        ],
+        "lods": true,
+        "material": [
+          "stone"
+        ]
+      },
+      "authors": {
+        "Dario Barresi": "Photography",
+        "Rico Cilliers": "photography, processing"
+      },
+      "categories": [
+        "rocks",
+        "nature",
+        "collection: verdant_trail"
+      ],
+      "category": "Nature/Rocks & Stone/Boulders",
+      "category_id": "229f6baa-7051-5eb5-8f2d-ed2aba17c8ea",
+      "collections": [
+        "verdant_trail"
+      ],
+      "date_published": 1707177600,
+      "description": "Free 8K model of a weathered reddish quartz stone with a rough, pebbly surface, earthy dirt streaks, crystalline veins and detailed, rugged geometry.",
+      "dimensions": [
+        147.15217798948288,
+        89.41811323165894,
+        71.89157977700233
+      ],
+      "download_count": 4411,
+      "files_hash": "3b541260ddde766b6bcfae56be426b81ce1a1e81",
+      "img_version": "347a4b6f",
+      "info": null,
+      "lods": true,
+      "max_resolution": [
+        8192,
+        8192
+      ],
+      "name": "Stone 01",
+      "polycount": 71916,
+      "sponsors": [
+        "95481047",
+        "84390067"
+      ],
+      "staging": null,
+      "tags": [
+        "rock",
+        "stone",
+        "pebbles",
+        "dirt",
+        "terrain",
+        "gravel",
+        "quartz"
+      ],
+      "texel_density": 36264.456258287806,
+      "thumbnail_url": "https://cdn.polyhaven.com/asset_img/thumbs/stone_01.png?width=256&height=256&v=347a4b6f",
+      "type": 2,
+      "version_required": {
+        "blend": "4.0.1"
+      }
+    },
+    "trashbag": {
+      "attributes": {
+        "condition": [
+          "worn"
+        ],
+        "material": [
+          "plastic"
+        ]
+      },
+      "authors": {
+        "Benny Weimer": "All"
+      },
+      "categories": [
+        "collection: project_lighthouse",
+        "props"
+      ],
+      "category": "Containers & Storage/Bags/Waste Bags",
+      "category_id": "bd37d762-aa43-518f-bfac-f5d41da2223d",
+      "collections": [
+        "project_lighthouse"
+      ],
+      "date_published": 1780963200,
+      "description": "Free 8K model of a shiny black trash bag, crumpled and heavy with visible packaging under stretched plastic, rich folds, sharp creases, and grimy wear.",
+      "dimensions": [
+        528.0700623989105,
+        462.893009185791,
+        574.9993845820427
+      ],
+      "donated": true,
+      "download_count": 1875,
+      "files_hash": "d291da0b535dffda7f7262b5e9210c93892576f7",
+      "img_version": "f70df19b",
+      "max_resolution": [
+        8192,
+        8192
+      ],
+      "name": "Trashbag",
+      "polycount": 4482,
+      "staging": null,
+      "tags": [
+        "garbage bag",
+        "refuse",
+        "street waste",
+        "trash",
+        "street",
+        "scrapyard",
+        "junkyard",
+        "garbage",
+        "bin",
+        "dumpster",
+        "disposal",
+        "litter",
+        "rubbish"
+      ],
+      "texel_density": 6746.215197693091,
+      "thumbnail_url": "https://cdn.polyhaven.com/asset_img/thumbs/trashbag.png?width=256&height=256&v=f70df19b",
+      "type": 2
+    },
+    "withered_grass": {
+      "attributes": {
+        "condition": [
+          "weathered"
+        ],
+        "origin": "natural",
+        "setting": "outdoor",
+        "surface_use": "ground"
+      },
+      "authors": {
+        "Charlotte Baglioni": "All"
+      },
+      "categories": [
+        "natural",
+        "outdoor",
+        "floor"
+      ],
+      "category": "Ground & Terrain/Grass & Vegetation/Dry & Sparse Grass",
+      "category_id": "e9516d71-1efd-51d6-b3c4-ce945ee92604",
+      "date_published": 1694044800,
+      "description": "Free 8K texture of withered grass: brittle, fibrous, sun-bleached blades in muted brown and tan with scattered debris and compacted earth tones.",
+      "dimensions": [
+        1999.9996423721313,
+        1999.9996423721313
+      ],
+      "download_count": 8155,
+      "files_hash": "eb88811d5af353e86750f73f412bf5aea3f7c8ab",
+      "img_version": "9de71eae",
+      "info": null,
+      "max_resolution": [
+        8192,
+        8192
+      ],
+      "name": "Withered Grass",
+      "staging": null,
+      "tags": [
+        "old",
+        "weathered",
+        "grass",
+        "dead grass",
+        "discolored",
+        "driedup",
+        "dry"
+      ],
+      "thumbnail_url": "https://cdn.polyhaven.com/asset_img/thumbs/withered_grass.png?width=256&height=256&v=9de71eae",
+      "type": 1
+    }
+  },
+  "license": "CC0 1.0",
+  "license_url": "https://polyhaven.com/license"
+}

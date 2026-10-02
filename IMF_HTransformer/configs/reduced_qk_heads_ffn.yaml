@@ -1,0 +1,17 @@
+extends:
+  - ../../common/configs/model_common.yaml
+  - ../config.yaml
+model:
+  attention:
+    mode: dense
+    stage3_mode: dense
+    stage4_mode: dense
+    position_bias: metric
+    stage3_heads: 4
+    stage4_heads: 8
+    stage3_qk_channels: 192
+    stage4_qk_channels: 256
+    stage3_mlp_ratio: 1.0
+    stage4_mlp_ratio: 1.0
+training:
+  output: artifacts/checkpoints/imf_ablation/reduced_qk_heads_ffn/seed_7

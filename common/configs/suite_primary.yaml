@@ -1,0 +1,7 @@
+name: primary
+models: [cnn_htransformer, cnn_vit, cnn, imf_htransformer]
+seeds: [7, 17, 29]
+epochs: 80
+profile: research
+manifest: data/manifests/all.jsonl
+evaluate_test: false

@@ -1,0 +1,7 @@
+name: smoke
+models: [cnn, cnn_vit, cnn_htransformer, imf_htransformer]
+seeds: [7]
+epochs: 2
+profile: tiny
+manifest: artifacts/smoke_data/manifests/all.jsonl
+evaluate_test: false

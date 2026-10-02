@@ -1,0 +1,11 @@
+extends:
+  - ../../common/configs/model_common.yaml
+  - ../config.yaml
+model:
+  fusion: family
+  attention:
+    mode: sparse
+    position_bias: metric
+    neighbors: 32
+training:
+  output: artifacts/checkpoints/imf_ablation/family_fusion_metric_sparse_attention/seed_7

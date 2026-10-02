@@ -1,0 +1,13 @@
+{
+  "camera_coordinates": "OpenCV x right, y down, z forward after exporter conversion",
+  "cx": 319.5,
+  "cy": 239.5,
+  "distortion": "none (ideal Blender pinhole)",
+  "fov_convention": "Blender horizontal camera angle for 4:3 sensor fit",
+  "fx": 440.44221455077553,
+  "fy": 440.44221455077553,
+  "height": 480,
+  "horizontal_fov_degrees": 72.0,
+  "id": "ef7bd4863ce298826b4b4d5644a8a0f3e7a9d8e4a945c5e67c940a5a6d125927",
+  "width": 640
+}

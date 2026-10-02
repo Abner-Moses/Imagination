@@ -10,10 +10,10 @@ power measurements were available and no watts or battery savings are claimed.
 ```sh
 cmake -S . -B build -DBUILD_TESTING=ON -DBUILD_MOTION_CAMERA=ON
 cmake --build build -j2
-./build/motion_benchmark --frames 1000 --debug /tmp/imagination-motion-demo
-./build/motion_benchmark --frames 1000 --levels 0
-./build/motion_benchmark --frames 1000 --forward-backward
-./build/motion_benchmark --frames 1000 --triangulate
+./artifacts/build/motion_benchmark --frames 1000 --debug /tmp/imagination-motion-demo
+./artifacts/build/motion_benchmark --frames 1000 --levels 0
+./artifacts/build/motion_benchmark --frames 1000 --forward-backward
+./artifacts/build/motion_benchmark --frames 1000 --triangulate
 ```
 
 Each run uses a deterministic 320x240 grayscale texture with smooth translation

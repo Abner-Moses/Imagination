@@ -1,0 +1,17 @@
+extends:
+  - ../../common/configs/model_common.yaml
+  - ../config.yaml
+model:
+  attention:
+    mode: sparse
+    stage3_mode: sparse
+    stage4_mode: sparse
+    stage3_sparse_neighbors: 32
+    stage4_sparse_neighbors: 32
+    stage3_sparse_selection: metric
+    stage4_sparse_selection: metric
+    stage3_use_map_context: true
+    stage4_use_map_context: true
+    position_bias: metric
+training:
+  output: artifacts/checkpoints/imf_ablation/attention_policy_sparse_sparse/seed_7

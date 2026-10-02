@@ -1,163 +1,201 @@
-# A beginner's guide to Imagination
+# Architecture
 
-Think of the program as a set of tools that turn measurements into useful facts.
-The files follow those jobs; the public header describes what each tool accepts
-and returns. The same data can be used by later research stages without drawing it.
+This document is the canonical overview of the frozen pre-LBA system. Detailed
+numerical definitions live in [model_contract.md](model_contract.md),
+[imf.md](imf.md), and [semantic_map.md](semantic_map.md).
 
-```text
-main.cpp: read arguments and choose a workflow
-    |
-    +-- config.cpp: validate settings and inputs
-    +-- vision.cpp: camera frame -> gradients, points, textures and boundaries
-    +-- motion.cpp: sequential frames -> optical flow -> camera motion
-    +-- geometry.cpp: calibrated images/depth -> metric points
-    |       |
-    |       +-- terrain.cpp: points -> ground grid -> landing checks
-    |
-    +-- output.cpp: write files or draw diagnostics when explicitly requested
+## Research boundary
 
-tests.cpp: give each stage known inputs and check the answers
-```
+Imagination assigns operations according to one question: why is this learned?
+Reliable image processing, geometry, probability, physics, coordinate transforms,
+and deterministic map operations belong in IMF. Convolution handles local learned
+structure. The HTransformer handles residual semantic compatibility and contextual
+composition.
 
-`imagination.hpp` is the shared public contract. `src/internal.hpp` contains only
-small helpers needed between modules. Implementation classes and scratch buffers
-stay inside the module that uses them. The project uses ordinary functions,
-records and OpenCV buffers; there is no plugin framework or dynamic module loader.
+| Responsibility | Owner |
+|---|---|
+| Color, gradients, orientation, corners, edges, contours | IMF |
+| Optical motion and metric surface support | IMF |
+| Measurement validity and approximate position uncertainty | IMF |
+| Causal persistent memory and semantic evidence fusion | IMF |
+| Map association, visibility, coordinates, distance, density, clearance, drift | IMF |
+| Local feature combinations | Convolution and MBConv |
+| Residual long-range semantic compatibility | HTransformer Q/K |
+| Scene and candidate interpretation | Shared learned heads |
 
-## Words you will see in the code
+This allocation reduces what the network must rediscover. Training must still
+determine whether it improves the accuracy/resource trade-off.
 
-- **Pixel:** one cell in an image. `cv::Mat` stores an image or numeric grid.
-- **Gradient:** how quickly brightness changes across neighboring pixels.
-- **Corner:** an image point whose neighborhood changes in two directions.
-- **Optical flow:** the movement of an image point between frames, in pixels.
-- **Ego-motion:** the camera's motion estimated from image correspondences.
-- **Calibration:** numbers that relate image pixels to rays leaving the camera.
-- **Triangulation:** intersecting rays from different camera positions to estimate a 3-D point.
-- **Terrain grid:** ground elevation sampled in square cells.
-- **Validity mask:** which values can be used; an unknown value is not a safe value.
-- **`std::optional`:** a result that may be unavailable; check it before using it.
-- **Regression test:** a known example that catches accidental behavior changes.
+## End-to-end flow
 
-Optical flow alone does not measure metres. The motion module needs calibrated
-camera geometry and a valid height reading to estimate metric planar motion.
-Contours are image boundaries, not semantic object detections. These distinctions
-are essential when interpreting the output or making navigation decisions.
+    frame t RGB + vehicle sensors
+                    |
+          +---------+----------+
+          |                    |
+       RGB path          IMF extraction
+          |          appearance / motion / geometry
+          |                    |
+          +----------+---------+
+                     |
+              local learned encoder
+                     |
+       predicted map through frame t-1
+          |          |
+          |     deterministic relations,
+          |     candidates, visibility,
+          |     egocentric coordinates
+          |          |
+          +----------+
+                     |
+          convolution-assisted HTransformer
+                     |
+       hazard / landing / semantic / POI maps
+             scene and candidate verdicts
+                     |
+        frame t predictions update the map
 
-## How to read the main processing functions
+The update order is a scientific invariant. Current or future simulator labels
+never enter the predicted map or current-frame context.
 
-Start with `VisualFeatureExtractor::extract()` in `src/vision.cpp`. Its flow is:
+## Observations
 
-1. `validateFrame()` checks type, calibration and timestamps.
-2. `prepare()` reduces resolution and converts to grayscale.
-3. `extractSpatialFeatures()` computes selected maps, sharing derivatives and the tensor.
-4. `motion()` calls the existing temporal tracker when calibration is available.
-5. Return the reusable result with coordinates, validity, timing and feature records.
+The RGB models receive a 256 by 256 RGB tensor. IMF-HTransformer receives a fixed
+28 by 32 by 32 analytical tensor and a same-shaped validity tensor. The channel
+cache remains stable and is divided only inside the model:
 
-Next read `SparseFlowTracker::processFrame()` in `src/motion.cpp`:
+- appearance and structure: channels 1–20;
+- motion: channels 21–22;
+- geometry: channels 23–28.
 
-1. Check the input and decide whether the height measurement is fresh enough.
-2. Prepare grayscale, then build/reuse the small image pyramid.
-3. Track points with Lucas-Kanade.
-4. `estimateTrackedMotion()` rejects geometric outliers and checks whether metric scale is available.
-5. Update optional sparse landmarks, replenish missing points, and remember this frame.
+Each IMF family concatenates masked values with validity, applies a one-by-one
+projection, then a depthwise three-by-three refinement. Research widths are
+96, 32, and 64, summing to the 192-channel backbone embedding. Small and tiny
+profiles use smaller configured widths. Flat fusion remains an ablation.
 
-The explicit checks are part of the algorithm, not unnecessary complexity.
-Changing pixel-center math, coordinate signs, height freshness, or the treatment
-of unknown terrain can produce plausible but wrong answers.
+The 13 vehicle-state values never enter the spatial IMF tensor. State, 30
+deterministic relations, and up to 32 map candidates retain separate masks.
+Candidate values also have per-feature validity, so a measured zero differs from an
+unavailable value.
 
-## What was simplified inside the code
+## Four model families
 
-- One camera-resize rule now serves both motion and visual extraction. It preserves
-  camera rays and OpenCV's pixel-center convention, including odd image dimensions.
-- Visual feature dependencies are named booleans instead of repeated long conditions.
-  Disabled features still avoid unnecessary work.
-- The motion loop delegates pyramid construction and geometric/metric estimation
-  to named steps. Track IDs and their triangulation anchors are filtered together.
-- Commands share strict integer parsing and benchmark statistics. One command table
-  drives both help and execution, so their lists cannot accidentally disagree.
-- Public declarations no longer include test-only and workflow helper structures.
-- Sample configuration is normal YAML again; documentation is split by topic.
+The model registry in common/models/registry.py is authoritative.
 
-## Making a safe first change
+| Model | Front end | Context mechanism |
+|---|---|---|
+| CNN | learned RGB convolution | local convolution |
+| CNN-ViT | learned RGB convolution | conventional transformer |
+| CNN-HTransformer (CoHAtNet-inspired) | learned RGB convolution | MBConv-value HTransformer |
+| Imagination IMF-HTransformer | family-aware analytical fusion | IMF-assisted MBConv-value HTransformer |
 
-Change one setting or one feature at a time. Locate its test and add a small known
-example when changing behavior. Run the full tests, inspect the output, and explain
-the physical assumptions in your review. Do not remove a calibration or hazard
-check merely to obtain more valid-looking output.
+Shared components include output heads, state/relation/candidate conditioning,
+losses, metrics, evaluation, checkpoints, and training. The model differences are
+intentional experimental variables, not separate training frameworks.
 
-Return values from the visual extractor borrow reusable buffers; clone maps before
-keeping them past the next frame. One tracker/extractor belongs to one stream.
-Output drawing and file writing are explicit operations outside the flight hot path.
+## HTransformer
 
-## Build and compatibility
+For a spatial feature map F, Q and K are independent learned projections. The
+spatial value tensor is:
 
-CMake compiles modules directly and omits optional motion/vision sources when disabled.
-The common library is available as `Imagination::core` or `metric_mapping`; existing
-`metric_motion`, `metric_stereo` and `metric_visual` names remain aliases when enabled.
-Tiny forwarding headers under `build/include/metric_mapping/` support older includes.
-They contain no implementation and are not files contributors need to maintain.
+[
+V = \operatorname{Tokenize}(\operatorname{MBConv}(F)).
+]
 
-`configs/` contains the canonical examples. For existing scripts, CMake also creates
-missing copies under `build/configs/` without overwriting edited copies. Relative
-paths are always resolved from the YAML file's own directory; prefer the canonical
-examples when starting a new experiment.
+There is no conventional linear projection of spatial V before attention. This
+MBConv-value rule applies to the regular image grid. Map candidates form an
+unordered set, so their keys and values use independent pointwise encoders. No
+convolution is applied across candidate array order.
 
-The existing geometric pipelines remain independent of the future learned model.
-The next research boundary is synchronized, calibrated sensor data joined to the
-feature records, then an explicit representation/token encoder. See
-[the pre-extraction reference](pre_extraction.md) for the full integration plan.
+Stage 3 operates on 16 by 16 tokens and stage 4 on 8 by 8 tokens. Their attention
+mode, neighbor count, map-context use, Q/K dimension, heads, and FFN ratios are
+configured separately. The primary architecture uses one block in each stage.
+Alternative widths and attention policies remain explicit ablations.
 
-## Verification of the modular refactor
+Gathered sparse attention creates scores for selected query-neighbor pairs rather
+than building the dense spatial score matrix. The default prior uses supported
+camera-frame geometry distance. Optional flow, slope, and roughness dissimilarity
+and active-query selection are experimental and disabled in the primary path.
+Reduced pair count is reported separately from MACs and measured latency.
 
-The Release build passes 50 regression cases plus synthetic-motion, analytical
-still/sequence and demo-generation/JSON CTests. The
-AddressSanitizer/UndefinedBehaviorSanitizer build,
-including float-cast overflow checks, also passes. The diagnostic JPEG remains
-byte-for-byte identical. Spatial-only, motion-only and RGB-D-only builds are
-checked independently. Webcam support compiles; physical camera/sensor acquisition
-has not been exercised by these automated tests.
+## Persistent semantic map
 
-The live `optical_flow` command now uses `PixelFlowTracker` for uncalibrated camera
-frames. It reuses sparse tracking but exposes only pixel displacement/velocity,
-never metric pose. Its additional regression covers BGR input, downsampling,
-known translations, timing, reset, texture loss and optional arrow rendering;
-the current full suite has 38 cases. `motion_camera` remains the calibrated path.
+The map stores resolved entities in a stable local metric frame. An entity carries:
 
-## Primary analytical tensor profile
+- absolute map-frame XYZ and optional 3 by 3 position covariance;
+- semantic evidence, posterior probabilities, entropy, and support;
+- extent, first/last observation times, source observations, and attributes.
 
-`analyticalFeatureSettings()` selects the 28-channel research bank inside the
-existing `VisualFeatureExtractor`. `pre_extract` is a command in `imagination`,
-not another application. The flow ends at a channel-major float32 tensor and mask:
+Pixel/depth uncertainty is propagated with a first-order projection Jacobian.
+Camera-pose covariance is a documented support-derived approximation because the
+current estimator does not expose calibrated covariance.
 
-```text
-vision: shared luminance/derivatives → appearance/HOG/Harris/boundaries/chroma
-        previous luminance         → dense Farneback U/V
-motion: existing sparse LK         → persistent correspondences
-geometry: essential pose diagnostics (unit-baseline scale)
-          validated nadir/range poses → filtered metric triangulation
-vision: bounded colored local map  → terrain grid + bounded IDW
-terrain: surface-only measurements → metric slope/diffusion/residual roughness
-geometry: current-camera projection + z-buffer → supported image-aligned geometry
-vision: fixed normalization + selection + masks → C×32×32 tensor → STOP
-```
+Association first uses a voxel pre-gate and semantic compatibility. When both
+covariances are valid, the final gate uses a stabilized Mahalanobis solve.
+Euclidean fallback is recorded only when covariance is unavailable. Repeated
+semantics use bounded, correlation-discounted Dirichlet-style evidence rather than
+raw arithmetic averaging.
 
-`imagination.hpp` extends the existing settings/result contract. `src/vision.cpp`
-coordinates the stages; `src/motion.cpp` exposes pre-model LK correspondences;
-`src/geometry.cpp` recovers relative pose and projects terrain;
-`src/terrain.cpp::measureSurface()` shares diffusion and residual statistics without
-running landing decisions. `src/config.cpp` validates ablation/numeric settings;
-`src/output.cpp` renders fixed-scale tensor diagnostics. `main.cpp` accepts still,
-manifest, video/camera and explicitly synthetic inputs. Tests remain in `tests.cpp`.
+The map remains useful when an entity is outside the current camera. Visibility
+gates current-view token attention; it does not erase persistent obstacles or
+remove them from deterministic safety geometry.
 
-No additional C++ code files were introduced. All previous build switches and
-library aliases remain. With `BUILD_VISUAL_FEATURES=ON`, OpenCV video provides
-dense Farneback even when sparse `BUILD_MOTION=OFF`; calibration/geometry modules
-support rectification and relative-pose functions. Disabling visual features
-removes those analytical dependencies. The existing sparse-only path does not
-start computing dense flow.
+## Relations and candidates
 
-The [pre-extraction guide](pre_extraction.md) is the authoritative channel, unit,
-validity, configuration, coordinate and timing contract. The full bank is a
-candidate experiment, not a claim that computing every feature is cheapest.
-Learned adapters, CoHAtNet/HTransformer, semantic outputs and navigation are future
-consumers of that contract, not dependencies of this implementation.
+The map remains in its stable frame. Learned positions and horizontal vectors are
+converted into a yaw-aligned ego frame with positive x forward and positive y left.
+Point transforms include translation; vector transforms apply rotation only.
+
+IMF computes candidate-centered obstacle and restricted-region clearance, free
+radius, cone and obstacle density, map-frame drifted clearances, and landing margin.
+Extended regions currently use point-to-disc distance from stored centers and
+extents. Merged regions preserve absolute map coordinates, while the candidate
+tensor carries egocentric coordinates.
+
+Visibility is represented by independent categorical indicators for unknown,
+visible, behind-camera, outside-FOV, occluded, and depth-inconsistent states. It is
+not encoded as an ordinal scalar.
+
+## Outputs and loss
+
+All models return the same output names:
+
+- hazard_logits and landing_logits;
+- semantic_logits;
+- poi.class_logits;
+- scene_risk_logits;
+- candidate.risk_logits and candidate.landing_safe_logits.
+
+Spatial outputs are 32 by 32. Candidate verdicts combine mask-aware candidate
+features with shared state and relation embeddings. The heads interpret supplied
+geometry; they do not reconstruct clearance or drift arithmetic.
+
+Targets and masking are defined in [model_contract.md](model_contract.md).
+Training uses the shared multitask loss and validation metrics.
+
+## Causal training path
+
+For each episode:
+
+1. Build frame t context from the model's predictions through frame t-1.
+2. Calculate current deterministic relations and projected candidates.
+3. Run frame t inference.
+4. Apply current prediction thresholds and geometric support.
+5. Update the predicted map.
+
+Candidate target depth is read only when constructing supervision validity after
+context creation. It never becomes a model or map input.
+
+## Serialized contracts
+
+common/registry.py owns the analytical channel, candidate, map, model, checkpoint,
+manifest, statistics, readiness, and training-plan versions. Incompatible
+checkpoints fail before weights are loaded. Style-only refactors do not bump these
+versions.
+
+## Current limitations
+
+Pose covariance is approximate. Region distance uses disc approximations. Extended
+entity visibility is center-point based. Deployment depth is reconstructed rather
+than sensed. The dataset is synthetic. Resource measurements are development-host
+results, and target-device energy has not been measured. These limits constrain the
+claims that can be made from the primary experiment.

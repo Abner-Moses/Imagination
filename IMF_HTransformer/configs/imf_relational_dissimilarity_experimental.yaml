@@ -1,0 +1,22 @@
+extends:
+  - ../../common/configs/model_common.yaml
+  - ../config.yaml
+model:
+  attention:
+    mode: sparse
+    stage3_mode: sparse
+    stage4_mode: dense
+    stage3_sparse_neighbors: 32
+    stage3_sparse_selection: metric
+    stage3_use_map_context: false
+    stage4_use_map_context: true
+    position_bias: metric
+    imf_dissimilarity:
+      enabled: true
+      weight: 0.25
+      # Descriptor channels are already normalized by the C++ extractor.
+      # 0.25 means 4 px/frame, 22.5 degrees, and 0.025 m respectively.
+      scales: [0.25, 0.25, 0.25, 0.25]
+      weights: [1.0, 1.0, 0.5, 0.5]
+training:
+  output: artifacts/checkpoints/imf_ablation/imf_relational_dissimilarity_experimental/seed_7

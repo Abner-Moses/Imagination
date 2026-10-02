@@ -1,0 +1,19 @@
+extends:
+  - ../../common/configs/model_common.yaml
+  - ../config.yaml
+model:
+  attention:
+    mode: sparse
+    stage3_mode: sparse
+    stage4_mode: dense
+    stage3_sparse_neighbors: 32
+    stage3_sparse_selection: metric
+    stage3_use_map_context: false
+    stage4_use_map_context: true
+    position_bias: metric
+    stage3_qk_dim: 192
+    stage4_qk_dim: 384
+    stage3_ffn_ratio: 1.0
+    stage4_ffn_ratio: 1.0
+training:
+  output: artifacts/checkpoints/imf_ablation/attention_ffn_reduced/seed_7
