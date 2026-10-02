@@ -70,16 +70,21 @@ common/registry.py owns numerical and serialized contract versions.
 
 ## Setup
 
-Use Python 3.10 or newer. Install the training dependencies:
+Use Python 3.10 or newer. Create a dedicated training environment; `data/.venv`
+belongs to dataset generation and does not include PyTorch.
 
-    python -m pip install -r common/requirements.txt
+    python3 -m venv .venv-training
+    source .venv-training/bin/activate
+    python -m pip install --upgrade pip
+    python -m pip install -r requirements.txt
 
-For tests and formatting:
+On Windows, activate the environment with:
 
-    python -m pip install -r common/requirements-dev.txt
+    .venv-training\Scripts\activate
 
-ONNX export and detailed memory profiling use
-common/requirements-optional.txt. Building the IMF extractor also requires CMake
+The root requirements include training, test, and formatting dependencies. ONNX
+export and detailed memory profiling additionally use
+`common/requirements-optional.txt`. Building the IMF extractor also requires CMake
 3.21+, a C++17 compiler, and OpenCV development libraries.
 
 ## Dataset

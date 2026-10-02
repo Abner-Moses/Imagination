@@ -1,0 +1,2 @@
+# Training, readiness, tests, and repository quality checks.
+-r common/requirements-dev.txt

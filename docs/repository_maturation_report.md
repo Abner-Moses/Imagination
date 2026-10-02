@@ -71,5 +71,5 @@ checks for all four models. Ruff, compilation, and the dataset-independent healt
 command also pass. ONNX Runtime was unavailable for cross-runtime numerical checks.
 
 The complete preparation command reports READY with training-plan hash
-bc2a7b2fd820337bcea7da4e7fe7a466c413dcaa27f40825e894813603ae8afe. Primary
+8e640f63b319436c035ebcf2c371231d3a305a23e34b464fd0d2fea7e1915748. Primary
 training and final-test evaluation were not run.
